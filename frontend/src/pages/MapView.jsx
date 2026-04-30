@@ -1,208 +1,263 @@
 // src/pages/MapView.jsx
 //
-// Problem: The map page needs to load facility data from Supabase
-//          and show it on the map. We don't want to show a blank map
-//          while data is loading — that looks broken.
-// Solution: Fetch facilities on mount, show a loading state,
-//           then render the map once data arrives.
+// Architecture: three isolated render trees
+//   <Navbar>     — menu open/close state lives here alone
+//   <MapArea>    — memoised; only re-renders when `facilities` changes
+//   <ChatSheet>  — chat open/close + messages state lives here alone
+//
+// This means clicking the menu or chat button NEVER re-renders the map,
+// which is what was causing the ~1 second interaction delay.
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import FacilityMap from '../components/FacilityMap'
 import { supabase } from '../utils/supabaseClient'
+import { lazy, Suspense } from 'react'
 
+const FacilityMap = lazy(() => import('../components/FacilityMap'))
+
+// ══════════════════════════════════════════════════════════════════
+// NAVBAR (isolated — menu state stays here, map never sees it)
+// ══════════════════════════════════════════════════════════════════
+const Navbar = memo(function Navbar({ onNavigateProfile }) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+
+  // Close on outside tap
+  useEffect(() => {
+    if (!isMenuOpen) return
+    const close = (e) => {
+      if (!e.target.closest('.dropdown-wrapper')) setIsMenuOpen(false)
+    }
+    const t = setTimeout(() => document.addEventListener('pointerdown', close), 30)
+    return () => { clearTimeout(t); document.removeEventListener('pointerdown', close) }
+  }, [isMenuOpen])
+
+  return (
+    <nav className="navbar">
+      {/* Hamburger / dropdown */}
+      <div className="dropdown-wrapper">
+        <button
+          className={`btn-menu${isMenuOpen ? ' is-open' : ''}`}
+          onClick={() => setIsMenuOpen(v => !v)}
+          aria-label="Open navigation menu"
+          aria-expanded={isMenuOpen}
+        >
+          <div className="btn-menu-bar" />
+          <div className="btn-menu-bar" />
+          <div className="btn-menu-bar" />
+        </button>
+
+        <div className={`dropdown-menu${isMenuOpen ? ' is-open' : ''}`} role="menu" align="center">
+          <button className="dropdown-item" onClick={() => setIsMenuOpen(false)} role="menuitem">
+            Map Home
+          </button>
+          <button className="dropdown-item" onClick={() => setIsMenuOpen(false)} role="menuitem">
+            Saved Areas
+          </button>
+          <button className="dropdown-item danger" onClick={() => setIsMenuOpen(false)} role="menuitem">
+            Log Out
+          </button>
+        </div>
+      </div>
+
+      {/* Logo */}
+      <div className="navbar-logo">
+        <span className="navbar-logo-text">JOM AI</span>
+        <span className="navbar-logo-sub">Tampines</span>
+      </div>
+
+      {/* Profile */}
+      <button className="btn-profile" onClick={onNavigateProfile} aria-label="Go to profile">
+        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+      </button>
+    </nav>
+  )
+})
+
+// ══════════════════════════════════════════════════════════════════
+// MAP AREA (memoised — only re-renders when facilities list changes)
+// ══════════════════════════════════════════════════════════════════
+const MapArea = memo(function MapArea({ facilities, loading, error }) {
+  return (
+    <div className="map-area">
+      {loading && (
+        <div className="map-loading" aria-live="polite">
+          <div className="map-loading-spinner" />
+          <p className="map-loading-text">Loading Tampines…</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="map-error" role="alert">
+          <div className="map-error-card">
+            <p className="map-error-title">Failed to load map</p>
+            <p className="map-error-msg">{error}</p>
+          </div>
+        </div>
+      )}
+
+      <Suspense fallback={null}>
+        <FacilityMap facilities={facilities} />
+      </Suspense>
+    </div>
+  )
+})
+
+// ══════════════════════════════════════════════════════════════════
+// CHAT SHEET (isolated — all chat state lives here, map never sees it)
+// ══════════════════════════════════════════════════════════════════
+const INITIAL_MESSAGES = [
+  { id: 1, role: 'ai', text: 'Hello! I can help you find suitable facilities, check the weather, or avoid crowded areas. Where to?' }
+]
+
+const ChatSheet = memo(function ChatSheet() {
+  const [isOpen, setIsOpen] = useState(false)
+  const [input, setInput] = useState('')
+  const [messages, setMessages] = useState(INITIAL_MESSAGES)
+
+  // Swipe-down refs
+  const touchStartY = { current: null }
+  const touchCurrY = { current: null }
+
+  const toggle = () => setIsOpen(v => !v)
+
+  const sendMessage = () => {
+    const text = input.trim()
+    if (!text) return
+    setMessages(prev => [...prev, { id: Date.now(), role: 'user', text }])
+    setInput('')
+    // Placeholder reply — swap with real API call
+    setTimeout(() => {
+      setMessages(prev => [
+        ...prev,
+        { id: Date.now() + 1, role: 'ai', text: `Looking for "${text}"… Feature coming soon! 🗺️` }
+      ])
+    }, 800)
+  }
+
+  const onTouchStart = (e) => { touchStartY.current = e.touches[0].clientY }
+  const onTouchMove = (e) => { if (touchStartY.current) touchCurrY.current = e.touches[0].clientY }
+  const onTouchEnd = () => {
+    if (touchStartY.current && touchCurrY.current) {
+      if (touchCurrY.current - touchStartY.current > 60) setIsOpen(false)
+    }
+    touchStartY.current = null; touchCurrY.current = null
+  }
+
+  return (
+    <>
+      {/* Tap-outside scrim */}
+      <div
+        className={`chat-scrim${isOpen ? ' is-open' : ''}`}
+        onClick={() => setIsOpen(false)}
+        aria-hidden="true"
+      />
+
+      {/* Bottom sheet */}
+      <div
+        className={`chat-sheet${isOpen ? ' is-open' : ''}`}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        role="dialog"
+        aria-label="JOM AI Chat"
+      >
+        {/* Drag handle */}
+        <div
+          className="chat-handle"
+          onClick={toggle}
+          role="button"
+          tabIndex={0}
+          aria-label={isOpen ? 'Collapse chat' : 'Expand chat'}
+          onKeyDown={(e) => e.key === 'Enter' && toggle()}
+        >
+          <div className="chat-handle-pill" />
+        </div>
+
+        {/* Header */}
+        <div className="chat-header">
+          <div className="chat-header-dot" aria-hidden="true" />
+          <span className="chat-header-title">JOM AI</span>
+          <span className="chat-header-sub">Online · Tampines</span>
+        </div>
+
+        {/* Messages */}
+        <div className="chat-body">
+          {messages.map(msg => (
+            <div key={msg.id} className={`chat-bubble ${msg.role}`}>
+              {msg.role === 'ai' && <div className="chat-bubble-sender">JOM AI</div>}
+              {msg.text}
+            </div>
+          ))}
+        </div>
+
+        {/* Input */}
+        <div className="chat-input-area">
+          <input
+            className="chat-input"
+            type="text"
+            placeholder="Ask JOM AI…"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && sendMessage()}
+            aria-label="Chat message input"
+          />
+          <button className="btn-icon secondary" aria-label="Voice input">
+            <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+          </button>
+          <button className="btn-icon primary" onClick={sendMessage} aria-label="Send message">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </>
+  )
+})
+
+// ══════════════════════════════════════════════════════════════════
+// MAP VIEW — orchestrates data fetching only; no UI state here
+// ══════════════════════════════════════════════════════════════════
 export default function MapView() {
   const navigate = useNavigate()
-  const [facilities, setFacilities]   = useState([])
-  const [loading, setLoading]         = useState(true)
-  const [error, setError]             = useState(null)
-  const [count, setCount]             = useState(0)
 
-  // Mobile UI states
-  const [isMenuOpen, setIsMenuOpen]   = useState(false)
-  const [isChatOpen, setIsChatOpen]   = useState(false)
+  const [facilities, setFacilities] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  // Touch swipe states for closing the AI chatbox
-  const touchStartY = useRef(null)
-  const touchCurrentY = useRef(null)
-
-  const handleTouchStart = (e) => {
-    touchStartY.current = e.touches[0].clientY
-  }
-  const handleTouchMove = (e) => {
-    if (touchStartY.current) {
-      touchCurrentY.current = e.touches[0].clientY
-    }
-  }
-  const handleTouchEnd = () => {
-    if (touchStartY.current && touchCurrentY.current) {
-      const diff = touchCurrentY.current - touchStartY.current
-      if (diff > 50) setIsChatOpen(false) // Swiped down
-    }
-    touchStartY.current = null; touchCurrentY.current = null
-  }
-
-  // Fetch all facilities from Supabase on page load
   useEffect(() => {
-    async function loadFacilities() {
+    let cancelled = false
+    async function load() {
       setLoading(true)
       try {
         const { data, error } = await supabase
           .from('facilities')
           .select('id, name, type, lat, lng, address, is_sheltered, is_indoor')
           .order('name')
-
         if (error) throw error
-        setFacilities(data || [])
-        setCount(data?.length || 0)
+        if (!cancelled) setFacilities(data || [])
       } catch (err) {
+        if (!cancelled) setError(err.message)
         console.error('Failed to load facilities:', err)
-        setError(err.message)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
-    loadFacilities()
+    load()
+    return () => { cancelled = true }
   }, [])
 
   return (
-    <div style={{ height: '100dvh', width: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc', overflow: 'hidden', position: 'relative' }}>
-
-      {/* ── Top Navigation Bar ─────────────────────────────────────── */}
-      <div style={{
-        padding: '16px 20px',
-        background: '#ffffff',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
-        zIndex: 1000,
-        borderBottomLeftRadius: '24px',
-        borderBottomRightRadius: '24px',
-        position: 'relative'
-      }}>
-        {/* Left: Nav Button Dropdown (3 bars) */}
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            style={{ background: '#f8fafc', border: 'none', width: '44px', height: '44px', borderRadius: '999px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '5px', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}
-          >
-            <div style={{ width: '20px', height: '2.5px', background: '#ED2939', borderRadius: '999px' }} />
-            <div style={{ width: '20px', height: '2.5px', background: '#ED2939', borderRadius: '999px' }} />
-            <div style={{ width: '20px', height: '2.5px', background: '#ED2939', borderRadius: '999px' }} />
-          </button>
-          
-          {isMenuOpen && (
-            <div style={{ position: 'absolute', top: '54px', left: 0, background: '#ffffff', padding: '8px', borderRadius: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', width: '160px', zIndex: 1001, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <button onClick={() => setIsMenuOpen(false)} style={{ width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', borderRadius: '12px', fontWeight: 600, color: '#0f172a' }}>Map Home</button>
-              <button onClick={() => setIsMenuOpen(false)} style={{ width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', borderRadius: '12px', fontWeight: 600, color: '#0f172a' }}>Saved Areas</button>
-              <button onClick={() => setIsMenuOpen(false)} style={{ width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', borderRadius: '12px', fontWeight: 600, color: '#ED2939' }}>Log Out</button>
-            </div>
-          )}
-        </div>
-
-        {/* Center: Main Logo Text */}
-        <h1 style={{ color: '#ED2939', fontSize: '22px', fontWeight: 800, letterSpacing: '-0.5px', margin: 0 }}>
-          JOM AI
-        </h1>
-
-        {/* Right: Profile Logo (Navigates to /profile) */}
-        <button
-          onClick={() => navigate('/profile')}
-          style={{ background: '#ED2939', border: 'none', width: '44px', height: '44px', borderRadius: '999px', color: '#ffffff', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(237, 41, 57, 0.3)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
-        >
-          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-        </button>
-      </div>
-
-      {/* ── Main Map Area ─────────────────────────────────────── */}
-      <div style={{ flex: 1, position: 'relative', zIndex: 1 }}>
-        {loading && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.85)', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ width: '44px', height: '44px', borderRadius: '50%', border: '4px solid #f1f5f9', borderTopColor: '#ED2939', animation: 'spin 0.8s linear infinite' }} />
-            <p style={{ color: '#0f172a', fontSize: '14px', fontWeight: 600 }}>Loading Tampines...</p>
-          </div>
-        )}
-
-        {error && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.9)' }}>
-            <div style={{ background: '#ffffff', border: '1px solid #ef4444', borderRadius: '24px', padding: '24px', maxWidth: '300px', textAlign: 'center', boxShadow: '0 10px 25px rgba(239, 68, 68, 0.15)' }}>
-              <p style={{ color: '#ef4444', fontWeight: 700, marginBottom: '8px' }}>Failed to load map</p>
-              <p style={{ color: '#64748b', fontSize: '13px' }}>{error}</p>
-            </div>
-          </div>
-        )}
-
-        <FacilityMap facilities={facilities} />
-      </div>
-
-      {/* ── AI Chat Bottom Sheet ──────────────────────────────── */}
-      <div
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        style={{
-          position: 'absolute',
-          bottom: 0, left: 0, right: 0,
-          background: '#ffffff',
-          borderTopLeftRadius: '32px',
-          borderTopRightRadius: '32px',
-          boxShadow: '0 -4px 24px rgba(0,0,0,0.1)',
-          zIndex: 2000,
-          transform: isChatOpen ? 'translateY(0)' : 'translateY(calc(100% - 50px))',
-          transition: 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)',
-          height: '80dvh',
-          display: 'flex',
-          flexDirection: 'column'
-        }}
-      >
-        {/* Handle (The flat dome top) */}
-        <div
-          onClick={() => setIsChatOpen(!isChatOpen)}
-          style={{
-            height: '50px',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            cursor: 'pointer',
-            background: '#ffffff',
-            borderTopLeftRadius: '32px',
-            borderTopRightRadius: '32px',
-          }}
-        >
-          <div style={{ width: '48px', height: '6px', background: '#cbd5e1', borderRadius: '999px' }} />
-        </div>
-
-        {/* Chat History Container */}
-        <div style={{ flex: 1, padding: '20px', overflowY: 'auto', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-           <div style={{ background: '#ffffff', padding: '16px', borderRadius: '20px', borderTopLeftRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.03)', display: 'inline-block', maxWidth: '85%', alignSelf: 'flex-start' }}>
-             <p style={{ fontSize: '14px', color: '#0f172a', margin: 0, lineHeight: 1.5 }}>
-               <span style={{ fontWeight: 'bold', color: '#ED2939' }}>JOM AI</span><br/>
-               Hello! I can help you find suitable facilities, check the weather, or avoid crowded areas. Where to?
-             </p>
-           </div>
-        </div>
-
-        {/* Input Text Box Area */}
-        <div style={{ padding: '16px 20px', background: '#ffffff', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '12px', alignItems: 'center', paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
-          <input
-            type="text"
-            placeholder="Ask JOM AI..."
-            style={{ flex: 1, padding: '16px 24px', borderRadius: '999px', border: '1px solid #e2e8f0', background: '#f8fafc', outline: 'none', fontSize: '15px', color: '#0f172a' }}
-          />
-          {/* Voice Input Button */}
-          <button style={{ width: '48px', height: '48px', borderRadius: '999px', background: '#f1f5f9', color: '#ED2939', border: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', flexShrink: 0 }}>
-            <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
-          </button>
-          {/* Send Button */}
-          <button style={{ width: '48px', height: '48px', borderRadius: '999px', background: '#ED2939', color: '#ffffff', border: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', flexShrink: 0, boxShadow: '0 4px 12px rgba(237, 41, 57, 0.3)' }}>
-            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" /></svg>
-          </button>
-        </div>
-      </div>
-
-      {/* Spinning animation keyframes */}
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    <div className="map-page">
+      <Navbar onNavigateProfile={() => navigate('/profile')} />
+      <MapArea facilities={facilities} loading={loading} error={error} />
+      <ChatSheet />
     </div>
   )
 }
