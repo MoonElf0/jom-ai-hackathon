@@ -8,12 +8,12 @@
 
 /* ── Design Tokens ────────────────────────────────────────── */
 :root {
-  --color-bg:        #0f1117;
-  --color-surface:   #1a1d27;
-  --color-border:    #2a2d3a;
-  --color-accent:    #6366f1;   /* indigo */
+  --color-bg:        #f8fafc;
+  --color-surface:   #ffffff;
+  --color-border:    #e2e8f0;
+  --color-accent:    #ED2939;   /* Singapore Red */
   --color-accent2:   #22d3ee;   /* cyan */
-  --color-text:      #e2e8f0;
+  --color-text:      #0f172a;
   --color-muted:     #64748b;
 }
 
