@@ -1,38 +1,33 @@
 // src/components/FacilityMap.jsx
 //
-// Problem: Leaflet.js has a known bug with Vite — the default marker
-//          icons (the blue pins) are broken because Vite changes the
-//          file paths during build. We have to manually fix the icon paths.
-// Solution: Import the icon images directly and tell Leaflet where they are.
+// Pure map component — all Leaflet concerns live here.
+// This module is lazy-imported by MapView so Leaflet's large bundle
+// lands in a separate JS chunk and never blocks the UI thread.
 //
-// Problem: We need the map centred on Tampines with OneMap tiles as
-//          the background, and a pin for every facility from Supabase.
-// Solution: MapContainer from react-leaflet handles the map shell.
-//           TileLayer points to OneMap's free tile server.
-//           Each facility gets a Marker with a Popup.
+// Popup styles are defined in index.css (.popup-*) so there are
+// no inline style objects created on every render.
 
-import { useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { memo } from 'react'
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import L from 'leaflet'
 
-// Fix: Import Leaflet's default marker images directly so Vite can find them
+// Fix: Vite renames asset paths — manually wire Leaflet's default icons
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
-import markerIcon from 'leaflet/dist/images/marker-icon.png'
+import markerIcon   from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 
-// Patch the default icon so Leaflet finds the images
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
+  iconUrl:       markerIcon,
+  shadowUrl:     markerShadow,
 })
 
-// Tampines Hub coordinates — map centres here on load
+// ─── Constants ──────────────────────────────────────────────────
 const TAMPINES_CENTER = [1.3521, 103.9439]
 const DEFAULT_ZOOM    = 14
 
-// Colour-coded icon for each facility type
+// Colour palette per facility type
 const TYPE_COLOURS = {
   fitness_corner:      '#22d3ee',
   playground:          '#4ade80',
@@ -46,23 +41,31 @@ const TYPE_COLOURS = {
   sheltered_pavilion:  '#94a3b8',
 }
 
-function createColourIcon(type) {
+// Cache icons so we don't recreate SVG strings every render
+const iconCache = {}
+
+function getIcon(type) {
+  if (iconCache[type]) return iconCache[type]
+
   const colour = TYPE_COLOURS[type] || '#6366f1'
-  // Build a tiny SVG circle as the map marker
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
-      <circle cx="14" cy="14" r="10" fill="${colour}" stroke="white" stroke-width="2.5" opacity="0.95"/>
-    </svg>`
-  return L.divIcon({
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
+    <circle cx="15" cy="15" r="11" fill="${colour}" stroke="white" stroke-width="2.5" opacity="0.95"/>
+    <circle cx="15" cy="15" r="5" fill="white" opacity="0.5"/>
+  </svg>`
+
+  const icon = L.divIcon({
     html: svg,
     className: '',
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -16],
+    iconSize:    [30, 30],
+    iconAnchor:  [15, 15],
+    popupAnchor: [0, -18],
   })
+
+  iconCache[type] = icon
+  return icon
 }
 
-// Formats snake_case type to "Title Case" for display
+// Formats "snake_case" → "Title Case"
 function formatType(type) {
   return (type || 'Facility')
     .split('_')
@@ -70,58 +73,59 @@ function formatType(type) {
     .join(' ')
 }
 
-export default function FacilityMap({ facilities = [] }) {
+// ─── Component ───────────────────────────────────────────────────
+export default memo(function FacilityMap({ facilities = [] }) {
   return (
     <MapContainer
       center={TAMPINES_CENTER}
       zoom={DEFAULT_ZOOM}
       className="map-container"
-      style={{ height: '100%', width: '100%' }}
+      // Disable attribution prefix for cleaner look
+      attributionControl={true}
+      zoomControl={true}
     >
-      {/* OneMap tile layer — Singapore government map, free to use */}
+      {/* OneMap (Singapore gov) tiles with OSM fallback */}
       <TileLayer
         url="https://www.onemap.gov.sg/maps/tiles/Default/{z}/{x}/{y}.png"
         attribution='<a href="https://www.onemap.gov.sg/" target="_blank">OneMap</a> &copy; Singapore Land Authority'
         maxZoom={19}
         minZoom={11}
-        // Fallback to OpenStreetMap if OneMap is slow
         errorTileUrl="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      {/* Drop a pin for each facility */}
-      {facilities.map((facility) => (
+      {/* Facility markers */}
+      {facilities.map((f) => (
         <Marker
-          key={facility.id}
-          position={[facility.lat, facility.lng]}
-          icon={createColourIcon(facility.type)}
+          key={f.id}
+          position={[f.lat, f.lng]}
+          icon={getIcon(f.type)}
         >
           <Popup className="facility-popup">
-            <div style={{ minWidth: '180px' }}>
-              <p style={{ fontWeight: 700, fontSize: '14px', marginBottom: '4px' }}>
-                {facility.name}
-              </p>
-              <p style={{ color: TYPE_COLOURS[facility.type] || '#6366f1', fontSize: '12px', marginBottom: '6px' }}>
-                {formatType(facility.type)}
-              </p>
-              {facility.address && (
-                <p style={{ fontSize: '11px', color: '#64748b' }}>{facility.address}</p>
-              )}
-              <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {facility.is_sheltered && (
-                  <span style={{ background: '#1e293b', color: '#22d3ee', padding: '2px 8px', borderRadius: '99px', fontSize: '10px' }}>
-                    Sheltered
-                  </span>
+            <p className="popup-name">{f.name}</p>
+            <p
+              className="popup-type"
+              style={{ color: TYPE_COLOURS[f.type] || '#6366f1' }}
+            >
+              {formatType(f.type)}
+            </p>
+
+            {f.address && (
+              <p className="popup-address">{f.address}</p>
+            )}
+
+            {(f.is_sheltered || f.is_indoor) && (
+              <div className="popup-tags">
+                {f.is_sheltered && (
+                  <span className="popup-tag sheltered">Sheltered</span>
                 )}
-                {facility.is_indoor && (
-                  <span style={{ background: '#1e293b', color: '#a78bfa', padding: '2px 8px', borderRadius: '99px', fontSize: '10px' }}>
-                    Indoor
-                  </span>
+                {f.is_indoor && (
+                  <span className="popup-tag indoor">Indoor</span>
                 )}
               </div>
-            </div>
+            )}
           </Popup>
         </Marker>
       ))}
     </MapContainer>
   )
-}
+})
