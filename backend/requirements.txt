@@ -1,0 +1,8 @@
+# JOM AI Backend Dependencies
+# Install: pip install -r requirements.txt
+
+requests==2.32.*
+python-dotenv==1.1.*
+supabase==2.*
+flask==3.*
+flask-cors==5.*
