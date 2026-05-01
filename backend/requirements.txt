@@ -6,3 +6,4 @@ python-dotenv==1.1.*
 supabase==2.*
 flask==3.*
 flask-cors==5.*
+groq>=1.2.0
