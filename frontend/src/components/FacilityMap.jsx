@@ -25,7 +25,13 @@ L.Icon.Default.mergeOptions({
 
 // ─── Constants ──────────────────────────────────────────────────
 const TAMPINES_CENTER = [1.3521, 103.9439]
-const DEFAULT_ZOOM    = 14
+const DEFAULT_ZOOM = 14
+
+// Restrict panning to Singapore
+const SINGAPORE_BOUNDS = [
+  [1.16, 103.59], // South West
+  [1.48, 104.10]  // North East
+]
 
 // Colour palette per facility type
 const TYPE_COLOURS = {
@@ -80,6 +86,9 @@ export default memo(function FacilityMap({ facilities = [] }) {
       center={TAMPINES_CENTER}
       zoom={DEFAULT_ZOOM}
       className="map-container"
+      maxBounds={SINGAPORE_BOUNDS}
+      maxBoundsViscosity={1.0}
+      minZoom={12}
       // Disable attribution prefix for cleaner look
       attributionControl={true}
       zoomControl={true}
@@ -89,7 +98,7 @@ export default memo(function FacilityMap({ facilities = [] }) {
         url="https://www.onemap.gov.sg/maps/tiles/Default/{z}/{x}/{y}.png"
         attribution='<a href="https://www.onemap.gov.sg/" target="_blank">OneMap</a> &copy; Singapore Land Authority'
         maxZoom={19}
-        minZoom={11}
+        minZoom={12}
         errorTileUrl="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
