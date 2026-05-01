@@ -88,7 +88,7 @@ export default memo(function FacilityMap({ facilities = [] }) {
       className="map-container"
       maxBounds={SINGAPORE_BOUNDS}
       maxBoundsViscosity={1.0}
-      minZoom={12}
+      minZoom={13}
       // Disable attribution prefix for cleaner look
       attributionControl={true}
       zoomControl={true}
@@ -98,7 +98,7 @@ export default memo(function FacilityMap({ facilities = [] }) {
         url="https://www.onemap.gov.sg/maps/tiles/Default/{z}/{x}/{y}.png"
         attribution='<a href="https://www.onemap.gov.sg/" target="_blank">OneMap</a> &copy; Singapore Land Authority'
         maxZoom={19}
-        minZoom={12}
+        minZoom={13}
         errorTileUrl="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 

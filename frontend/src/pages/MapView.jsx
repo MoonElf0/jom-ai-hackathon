@@ -8,10 +8,11 @@
 // This means clicking the menu or chat button NEVER re-renders the map,
 // which is what was causing the ~1 second interaction delay.
 
-import { useEffect, useState, memo } from 'react'
+import { useEffect, useState, useRef, memo, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
-import { lazy, Suspense } from 'react'
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 
 const FacilityMap = lazy(() => import('../components/FacilityMap'))
 
@@ -106,44 +107,114 @@ const MapArea = memo(function MapArea({ facilities, loading, error }) {
 })
 
 // ══════════════════════════════════════════════════════════════════
-// CHAT SHEET (isolated — all chat state lives here, map never sees it)
+// CHAT SHEET — calls Flask /api/ai/chat → Groq Llama 4 Scout
+// Maintains full conversation history so the AI has context.
 // ══════════════════════════════════════════════════════════════════
 const INITIAL_MESSAGES = [
-  { id: 1, role: 'ai', text: 'Hello! I can help you find suitable facilities, check the weather, or avoid crowded areas. Where to?' }
+  {
+    id: 1,
+    role: 'ai',
+    text: 'Hello! I can help you find facilities, check crowd levels, or update facility info. What do you need? 😊'
+  }
 ]
 
 const ChatSheet = memo(function ChatSheet() {
-  const [isOpen, setIsOpen] = useState(false)
-  const [input, setInput] = useState('')
+  const [isOpen, setIsOpen]     = useState(false)
+  const [input, setInput]       = useState('')
   const [messages, setMessages] = useState(INITIAL_MESSAGES)
+  const [isTyping, setIsTyping] = useState(false)
+  const bodyRef                 = useRef(null)
+  const inputRef                = useRef(null)
 
-  // Swipe-down refs
-  const touchStartY = { current: null }
-  const touchCurrY = { current: null }
+  // Swipe-down gesture refs (plain objects, not useRef — avoids re-renders)
+  const touchStartY = useRef(null)
+  const touchCurrY  = useRef(null)
+
+  // Auto-scroll to latest message
+  useEffect(() => {
+    if (bodyRef.current) {
+      bodyRef.current.scrollTop = bodyRef.current.scrollHeight
+    }
+  }, [messages, isTyping])
+
+  // Focus input when chat opens
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      setTimeout(() => inputRef.current?.focus(), 450)
+    }
+  }, [isOpen])
 
   const toggle = () => setIsOpen(v => !v)
 
-  const sendMessage = () => {
+  // ── Send message to Groq via Flask backend ─────────────────────
+  const sendMessage = async () => {
     const text = input.trim()
-    if (!text) return
-    setMessages(prev => [...prev, { id: Date.now(), role: 'user', text }])
+    if (!text || isTyping) return
+
+    const userMsg = { id: Date.now(), role: 'user', text }
+    // Build updated history to send (exclude the static greeting from history)
+    const updatedMessages = [...messages, userMsg]
+    setMessages(updatedMessages)
     setInput('')
-    // Placeholder reply — swap with real API call
-    setTimeout(() => {
+    setIsTyping(true)
+
+    // Convert our message format to the {role, content} format the backend expects
+    // Only send 'user' and 'assistant' roles (not our 'ai' label)
+    const historyForAPI = updatedMessages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role, content: m.text }))
+
+    // If no prior assistant messages, the last item is just the user message
+    // which is correct — the backend will respond as assistant
+    const payload = [
+      // Re-map our internal 'ai' role to 'assistant' for the API
+      ...messages
+        .filter(m => m.role === 'ai' || m.role === 'user')
+        .filter(m => m.id !== 1) // skip the initial greeting (not real history)
+        .map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.text })),
+      { role: 'user', content: text }
+    ]
+
+    try {
+      const res = await fetch(`${API_BASE}/api/ai/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: payload }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Server error ${res.status}`)
+      }
+
+      const data = await res.json()
       setMessages(prev => [
         ...prev,
-        { id: Date.now() + 1, role: 'ai', text: `Looking for "${text}"… Feature coming soon! 🗺️` }
+        { id: Date.now() + 1, role: 'ai', text: data.reply }
       ])
-    }, 800)
+    } catch (err) {
+      console.error('Chat error:', err)
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          role: 'ai',
+          text: `Sorry, I couldn't reach the server. Make sure the Flask backend is running on ${API_BASE}. (${err.message})`
+        }
+      ])
+    } finally {
+      setIsTyping(false)
+    }
   }
 
   const onTouchStart = (e) => { touchStartY.current = e.touches[0].clientY }
-  const onTouchMove = (e) => { if (touchStartY.current) touchCurrY.current = e.touches[0].clientY }
-  const onTouchEnd = () => {
+  const onTouchMove  = (e) => { if (touchStartY.current) touchCurrY.current = e.touches[0].clientY }
+  const onTouchEnd   = () => {
     if (touchStartY.current && touchCurrY.current) {
       if (touchCurrY.current - touchStartY.current > 60) setIsOpen(false)
     }
-    touchStartY.current = null; touchCurrY.current = null
+    touchStartY.current = null
+    touchCurrY.current  = null
   }
 
   return (
@@ -180,22 +251,33 @@ const ChatSheet = memo(function ChatSheet() {
         <div className="chat-header">
           <div className="chat-header-dot" aria-hidden="true" />
           <span className="chat-header-title">JOM AI</span>
-          <span className="chat-header-sub">Online · Tampines</span>
+          <span className="chat-header-sub">Powered by Llama 4 · Tampines</span>
         </div>
 
         {/* Messages */}
-        <div className="chat-body">
+        <div className="chat-body" ref={bodyRef}>
           {messages.map(msg => (
             <div key={msg.id} className={`chat-bubble ${msg.role}`}>
               {msg.role === 'ai' && <div className="chat-bubble-sender">JOM AI</div>}
               {msg.text}
             </div>
           ))}
+
+          {/* Typing indicator */}
+          {isTyping && (
+            <div className="chat-bubble ai">
+              <div className="chat-bubble-sender">JOM AI</div>
+              <div className="typing-dots">
+                <span /><span /><span />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Input */}
         <div className="chat-input-area">
           <input
+            ref={inputRef}
             className="chat-input"
             type="text"
             placeholder="Ask JOM AI…"
@@ -203,17 +285,22 @@ const ChatSheet = memo(function ChatSheet() {
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && sendMessage()}
             aria-label="Chat message input"
+            disabled={isTyping}
           />
-          <button className="btn-icon secondary" aria-label="Voice input">
-            <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-            </svg>
-          </button>
-          <button className="btn-icon primary" onClick={sendMessage} aria-label="Send message">
-            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
+          <button
+            className={`btn-icon primary${isTyping ? ' is-loading' : ''}`}
+            onClick={sendMessage}
+            disabled={isTyping}
+            aria-label="Send message"
+          >
+            {isTyping
+              ? <div className="btn-spinner" />
+              : (
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              )
+            }
           </button>
         </div>
       </div>
