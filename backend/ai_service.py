@@ -1,24 +1,16 @@
 """
-JOM AI — AI Service (Groq + Llama 4 Scout)
-============================================
-Handles all AI chat logic with an agentic tool-calling loop.
+JOM AI — AI Service (DeepSeek)
+==============================
+Handles general queries: facility lookup, crowd reports, microclimate tags.
 
-Tools available:
-  - query_facilities      → read facilities from Supabase
-  - update_facility       → write a field on a specific facility
-  - add_crowd_report      → insert a crowd report row
-  - add_microclimate_tag  → insert a microclimate tag
-  - search_location       → geocode a destination via OneMap
-  - start_navigation      → signal the frontend to render a route
+Navigation is handled entirely by the frontend (direct OneMap calls).
+This service is ONLY called for non-navigation questions.
 
-`chat()` returns {"reply": str, "action": dict | None}.
-When `start_navigation` is called, `action` will contain the destination
-and travel mode so the frontend can trigger live routing.
+`chat()` always returns {"reply": str, "action": None}.
 """
 
 import os
 import json
-import requests as req
 from openai import OpenAI
 from supabase import create_client
 from dotenv import load_dotenv
@@ -35,29 +27,22 @@ _sb = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
 MODEL = "deepseek-chat"
 
 # ── System prompt ─────────────────────────────────────────────────
-SYSTEM_PROMPT = """You are JOM AI, a Singapore neighbourhood assistant for Tampines HDB residents.
+SYSTEM_PROMPT = """You are JOM AI, a helpful assistant for Tampines HDB residents in Singapore.
 
-NAVIGATION RULES (most important):
-- For ANY navigation or directions request, ALWAYS call search_location then start_navigation. No exceptions.
-- ALWAYS call start_navigation even if you already navigated somewhere earlier in the conversation.
-- Never describe the route in text. Just set the map and reply with one short confirmation line.
-- Default mode is ALWAYS "pt" (public transport) unless:
-    - User explicitly says walk / drive / cycle, OR
-    - The destination is clearly within the same block / very nearby → use "walk"
-- Never ask the user which mode to use. Pick pt automatically.
+YOUR ROLE:
+- Answer questions about sports facilities, parks, and amenities in Tampines
+- Help users find specific facilities (basketball courts, gyms, swimming pools, etc.)
+- Accept crowd and microclimate condition reports from users
 
 REPLY RULES:
-- Keep every reply to 1 line or max 3 bullet points.
-- Never write paragraphs or full route descriptions.
-- For navigation: just say "Route set!" or "On the way to [place]!" — nothing more.
-- For facility queries: bullet-point the top 2–3 results only.
-- Light Singlish welcome (lah, can, shiok).
-
-TOOLS:
-- query_facilities: ALWAYS call first when user asks about facilities.
-- search_location: ALWAYS call before start_navigation to get coordinates.
-- start_navigation: Call with lat, lng, name, mode. Triggers map update.
-- update_facility / add_crowd_report / add_microclimate_tag: use when user reports info.
+- Max 3 bullet points or 2 short sentences — never write paragraphs
+- Use • for bullet points, NEVER -, *, or numbered lists
+- NEVER use ** bold or * italic markdown
+- For facility queries: call query_facilities, list 2-3 results with just name and address
+- End facility replies with "Want to navigate there?" on a new line
+- For crowd/condition reports: use add_crowd_report or add_microclimate_tag
+- Light Singlish welcome (lah, can, shiok)
+- If asked about navigation, say "Use the Navigate button above!"
 
 DATABASE — facilities table columns:
   id, name, type, address, lat, lng, is_sheltered, is_indoor, is_verified
@@ -69,9 +54,7 @@ FACILITY TYPES:
   sheltered_pavilion, community_hall, park, skate_park
 """
 
-# ── Tool definitions (sent to Groq) ───────────────────────────────
-# Llama 4 Scout passes all args as strings regardless of JSON schema type.
-# All params are declared as "string"; types are coerced in _run_tool.
+# ── Tool definitions ──────────────────────────────────────────────
 TOOLS = [
     {
         "type": "function",
@@ -194,63 +177,6 @@ TOOLS = [
             }
         }
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_location",
-            "description": (
-                "Search OneMap for a place or address in Singapore. "
-                "Returns coordinates and address details. "
-                "ALWAYS call this before start_navigation to get the destination lat/lng."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": (
-                            "Place name or address to search, "
-                            "e.g. 'THE TAPESTRY Tennis Court Singapore'"
-                        )
-                    }
-                },
-                "required": ["query"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "start_navigation",
-            "description": (
-                "Initiates turn-by-turn navigation on the map to a destination. "
-                "Call AFTER search_location to obtain coordinates. "
-                "The user's live GPS location will be used as the start point."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "lat": {
-                        "type": "string",
-                        "description": "Destination latitude from search_location result."
-                    },
-                    "lng": {
-                        "type": "string",
-                        "description": "Destination longitude from search_location result."
-                    },
-                    "name": {
-                        "type": "string",
-                        "description": "Human-readable destination name."
-                    },
-                    "mode": {
-                        "type": "string",
-                        "description": "Travel mode: 'walk', 'drive', 'cycle', or 'pt' (public transport)."
-                    }
-                },
-                "required": ["lat", "lng", "name", "mode"]
-            }
-        }
-    },
 ]
 
 
@@ -260,58 +186,10 @@ def _truthy(val) -> bool:
     return str(val).strip().lower() in ("true", "yes", "1")
 
 
-def _search_onemap(query: str) -> str:
-    """Call OneMap elastic search and return top 5 results as JSON string."""
-    try:
-        from onemap_token import get_token
-        token = get_token()
-        resp = req.get(
-            "https://www.onemap.gov.sg/api/common/elastic/search",
-            params={
-                "searchVal":      query,
-                "returnGeom":     "Y",
-                "getAddrDetails": "Y",
-                "pageNum":        1,
-            },
-            headers={"Authorization": token},
-            timeout=10,
-        )
-        data    = resp.json()
-        results = data.get("results", [])[:5]
-        return json.dumps([
-            {
-                "name":    r.get("BUILDING") or r.get("SEARCHVAL", ""),
-                "address": r.get("ADDRESS", ""),
-                "lat":     r.get("LATITUDE", ""),
-                "lng":     r.get("LONGITUDE", ""),
-                "postal":  r.get("POSTAL", ""),
-            }
-            for r in results
-        ])
-    except Exception as e:
-        return json.dumps({"error": str(e)})
-
-
-# ── Tool execution ────────────────────────────────────────────────
-def _run_tool(name: str, args: dict, nav_action: list) -> str:
+def _run_tool(name: str, args: dict, facility_result: list) -> str:
     """Dispatch a tool call and return its result as a JSON string."""
     try:
-        if name == "search_location":
-            return _search_onemap(args.get("query", ""))
-
-        elif name == "start_navigation":
-            nav_action[0] = {
-                "type": "navigate",
-                "destination": {
-                    "lat":  float(args.get("lat", 0)),
-                    "lng":  float(args.get("lng", 0)),
-                    "name": args.get("name", "Destination"),
-                },
-                "mode": args.get("mode", "walk"),
-            }
-            return json.dumps({"status": "Navigation initiated. The map will display the route."})
-
-        elif name == "query_facilities":
+        if name == "query_facilities":
             q = _sb.table("facilities").select(
                 "id, name, type, address, is_sheltered, is_indoor, lat, lng"
             )
@@ -327,6 +205,9 @@ def _run_tool(name: str, args: dict, nav_action: list) -> str:
             except ValueError:
                 limit = 10
             result = q.limit(limit).execute()
+            # Store first result so frontend can offer a "Navigate there" button
+            if result.data and facility_result[0] is None:
+                facility_result[0] = result.data[0]
             return json.dumps(result.data)
 
         elif name == "update_facility":
@@ -375,42 +256,46 @@ def _run_tool(name: str, args: dict, nav_action: list) -> str:
 
 
 # ── Main chat function ─────────────────────────────────────────────
-def chat(messages: list[dict]) -> dict:
+def chat(messages: list[dict], location: dict | None = None) -> dict:
     """
-    Run the full agentic loop and return {"reply": str, "action": dict | None}.
+    Run the agentic tool loop for general (non-navigation) queries.
+    Returns {"reply": str, "action": None}.
 
     `messages` is a list of {"role": "user"/"assistant", "content": "..."}
-    (the history from the frontend, without the system prompt — we prepend it).
-
-    When start_navigation is called, `action` contains:
-        {"type": "navigate", "destination": {"lat", "lng", "name"}, "mode": str}
-    This signals the frontend to request the user's GPS location and render the route.
+    `location` is {"lat": float, "lng": float} from the user's live GPS, or None.
     """
-    nav_action: list = [None]  # mutable container so _run_tool can write into it
-
-    groq_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
+    prompt = SYSTEM_PROMPT
+    if location:
+        try:
+            lat = float(location["lat"])
+            lng = float(location["lng"])
+            prompt += f"\n\nUser's current GPS location: {lat:.5f}°N, {lng:.5f}°E — use this to recommend nearby facilities and give distance estimates."
+        except (KeyError, TypeError, ValueError):
+            pass
+    ai_messages      = [{"role": "system", "content": prompt}] + messages
+    facility_result  = [None]  # mutable slot; _run_tool writes first facility found
 
     for _ in range(5):
         response = _deepseek.chat.completions.create(
             model=MODEL,
-            messages=groq_messages,
+            messages=ai_messages,
             tools=TOOLS,
             tool_choice="auto",
             temperature=0.7,
-            max_tokens=1024,
+            max_tokens=512,
         )
 
         choice = response.choices[0]
 
         if choice.finish_reason == "tool_calls":
             assistant_msg = choice.message
-            groq_messages.append(assistant_msg)
+            ai_messages.append(assistant_msg)
 
             for tool_call in assistant_msg.tool_calls:
                 fn_name = tool_call.function.name
                 fn_args = json.loads(tool_call.function.arguments)
-                result  = _run_tool(fn_name, fn_args, nav_action)
-                groq_messages.append({
+                result  = _run_tool(fn_name, fn_args, facility_result)
+                ai_messages.append({
                     "role":         "tool",
                     "tool_call_id": tool_call.id,
                     "content":      result,
@@ -418,11 +303,13 @@ def chat(messages: list[dict]) -> dict:
             continue
 
         return {
-            "reply":  choice.message.content or "Sorry, I couldn't generate a response.",
-            "action": nav_action[0],
+            "reply":           choice.message.content or "Sorry, I couldn't generate a response.",
+            "action":          None,
+            "primary_facility": facility_result[0],  # None if no facility was queried
         }
 
     return {
-        "reply":  "Sorry, something went wrong after too many tool calls. Please try again.",
-        "action": None,
+        "reply":           "Sorry, something went wrong after too many tool calls. Please try again.",
+        "action":          None,
+        "primary_facility": None,
     }
