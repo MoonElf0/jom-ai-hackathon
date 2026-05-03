@@ -23,9 +23,10 @@
 import { memo, useEffect } from 'react'
 import {
   MapContainer, TileLayer, Marker, Popup,
-  Polyline, Circle, CircleMarker, useMap,
+  Polyline, Circle, CircleMarker, useMap, Polygon,
 } from 'react-leaflet'
 import L from 'leaflet'
+import { TAMPINES_BOUNDARY } from '../utils/tampinesBoundary'
 
 // Fix: Vite renames asset paths — manually wire Leaflet's default icons
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
@@ -46,6 +47,20 @@ const DEFAULT_ZOOM    = 14
 const SINGAPORE_BOUNDS = [
   [1.16, 103.59],
   [1.48, 104.10],
+]
+
+// The "World" box used to create the mask
+const OUTER_WORLD = [
+  [-90, -180],
+  [-90, 180],
+  [90, 180],
+  [90, -180],
+]
+
+// Create a mask that covers everything except the precise Tampines boundary
+const MASK_COORDS = [
+  OUTER_WORLD,
+  ...TAMPINES_BOUNDARY
 ]
 
 const TYPE_COLOURS = {
@@ -294,6 +309,19 @@ export default memo(function FacilityMap({ facilities = [], userLocation = null,
         maxZoom={19}
         minZoom={13}
         errorTileUrl="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+
+      {/* Tampines Boundary Mask (Grey out everything else) */}
+      <Polygon
+        positions={MASK_COORDS}
+        pathOptions={{
+          fillColor: '#000',
+          fillOpacity: 0.35,
+          color: '#000',
+          weight: 0.5,
+          opacity: 0.2,
+        }}
+        interactive={false}
       />
 
       {/* Facility markers */}
