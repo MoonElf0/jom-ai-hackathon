@@ -45,9 +45,10 @@ def ai_chat():
     Returns:
         { "reply": "...", "action": null | {"type": "navigate", "destination": {...}, "mode": "..."} }
     """
-    body     = request.get_json(silent=True) or {}
-    messages = body.get("messages", [])
-    location = body.get("location")  # {"lat": float, "lng": float} or None
+    body        = request.get_json(silent=True) or {}
+    messages    = body.get("messages", [])
+    location    = body.get("location")     # {"lat": float, "lng": float} or None
+    preferences = body.get("preferences")  # {"display_name", "favorite_types", "preferred_transport"} or None
 
     if not messages:
         return jsonify({"error": "No messages provided."}), 400
@@ -58,7 +59,7 @@ def ai_chat():
 
     try:
         from ai_service import chat
-        result = chat(messages, location=location)
+        result = chat(messages, location=location, preferences=preferences)
         # result is {"reply": str, "action": dict | None}
         return jsonify(result)
     except Exception as e:
@@ -164,7 +165,19 @@ def onemap_route():
             headers={"Authorization": token},
             timeout=15,
         )
-        return jsonify(resp.json()), resp.status_code
+        data = resp.json()
+
+        if route_type == "pt":
+            itins = data.get("plan", {}).get("itineraries", [])
+            if itins:
+                legs = itins[0].get("legs", [])
+                leg_summary = [(l.get("mode"), l.get("transitLeg"), round(l.get("distance", 0))) for l in legs]
+                print(f"[PT Route] legs: {leg_summary}")
+            else:
+                print(f"[PT Route] no itineraries — response keys: {list(data.keys())}")
+                print(f"[PT Route] raw: {data}")
+
+        return jsonify(data), resp.status_code
     except Exception as e:
         print(f"[OneMap route] {e}")
         return jsonify({"error": str(e)}), 500

@@ -286,7 +286,7 @@ function formatType(type) {
 }
 
 // ─── Component ───────────────────────────────────────────────────
-export default memo(function FacilityMap({ facilities = [], userLocation = null, routeInfo = null }) {
+export default memo(function FacilityMap({ facilities = [], userLocation = null, routeInfo = null, onNavigateTo = null, user = null, savedFacilityIds = null, onSaveToggle = null }) {
   const { stepMarkers, stopMarkers } = routeInfo?.type === 'pt'
     ? buildPTMarkers(routeInfo)
     : { stepMarkers: [], stopMarkers: [] }
@@ -339,6 +339,22 @@ export default memo(function FacilityMap({ facilities = [], userLocation = null,
                 {f.is_indoor    && <span className="popup-tag indoor">Indoor</span>}
               </div>
             )}
+            <div className="popup-actions">
+              {onNavigateTo && (
+                <button className="popup-nav-btn" onClick={() => onNavigateTo(f)}>
+                  🚌 Route here
+                </button>
+              )}
+              {user && onSaveToggle && (
+                <button
+                  className={`popup-save-btn${savedFacilityIds?.has(f.id) ? ' saved' : ''}`}
+                  onClick={() => onSaveToggle(f)}
+                  title={savedFacilityIds?.has(f.id) ? 'Remove from saved' : 'Save place'}
+                >
+                  {savedFacilityIds?.has(f.id) ? '❤️ Saved' : '🤍 Save'}
+                </button>
+              )}
+            </div>
           </Popup>
         </Marker>
       ))}
