@@ -19,68 +19,54 @@ and travel mode so the frontend can trigger live routing.
 import os
 import json
 import requests as req
-from groq import Groq
+from openai import OpenAI
 from supabase import create_client
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # ── Clients ────────────────────────────────────────────────────────
-_groq = Groq(api_key=os.getenv("GROQ_API_KEY"))
-_sb   = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
+_deepseek = OpenAI(
+    api_key=os.getenv("DEEPSEEK_API_KEY"),
+    base_url="https://api.deepseek.com",
+)
+_sb = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
 
-MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+MODEL = "deepseek-chat"
 
 # ── System prompt ─────────────────────────────────────────────────
-SYSTEM_PROMPT = """You are JOM AI, a friendly Singapore neighbourhood assistant \
-built for Tampines HDB residents.
+SYSTEM_PROMPT = """You are JOM AI, a Singapore neighbourhood assistant for Tampines HDB residents.
 
-You help people find the best FREE nearby facilities for exercise, play, and \
-gathering — factoring in shelter, weather, crowd levels, and personal preferences.
+NAVIGATION RULES (most important):
+- For ANY navigation or directions request, ALWAYS call search_location then start_navigation. No exceptions.
+- ALWAYS call start_navigation even if you already navigated somewhere earlier in the conversation.
+- Never describe the route in text. Just set the map and reply with one short confirmation line.
+- Default mode is ALWAYS "pt" (public transport) unless:
+    - User explicitly says walk / drive / cycle, OR
+    - The destination is clearly within the same block / very nearby → use "walk"
+- Never ask the user which mode to use. Pick pt automatically.
 
-You can also navigate users to any location in Singapore. When a user asks to \
-navigate, go to, or get directions to a place:
-  1. Call search_location with the destination (add "Singapore" if not already in query)
-  2. Pick the most relevant result from the list
-  3. Call start_navigation with the lat, lng, name, and mode
-     - mode must be one of: walk, drive, cycle, pt (public transport)
-     - If the user doesn't specify mode, ask once then default to walk
+REPLY RULES:
+- Keep every reply to 1 line or max 3 bullet points.
+- Never write paragraphs or full route descriptions.
+- For navigation: just say "Route set!" or "On the way to [place]!" — nothing more.
+- For facility queries: bullet-point the top 2–3 results only.
+- Light Singlish welcome (lah, can, shiok).
 
-You have access to tools that query and update a live Supabase database of facilities.
+TOOLS:
+- query_facilities: ALWAYS call first when user asks about facilities.
+- search_location: ALWAYS call before start_navigation to get coordinates.
+- start_navigation: Call with lat, lng, name, mode. Triggers map update.
+- update_facility / add_crowd_report / add_microclimate_tag: use when user reports info.
 
-DATABASE SCHEMA (facilities table):
-- id (uuid)
-- name (text)
-- type (text): basketball_court, badminton_court, tennis_court, volleyball_court,
-  football_field, futsal_court, fitness_corner, gym, swimming_pool, playground,
-  cycling_path, jogging_track, multi_purpose_court, sheltered_pavilion,
-  community_hall, park, skate_park
-- address (text)
-- lat, lng (float)
-- is_sheltered (boolean)
-- is_indoor (boolean)
-- is_verified (boolean)
-- data_source (text)
-- source_id (text)
+DATABASE — facilities table columns:
+  id, name, type, address, lat, lng, is_sheltered, is_indoor, is_verified
 
-DATABASE SCHEMA (crowd_reports table):
-- facility_id (uuid, FK → facilities)
-- occupancy_level (text): empty, quiet, moderate, busy, full
-- note (text, optional)
-
-DATABASE SCHEMA (microclimate_tags table):
-- facility_id (uuid, FK → facilities)
-- tag_type (text): too_windy, too_hot, wet_floor, shade_available, good_lighting,
-  crowded, well_maintained, broken_equipment, mosquitoes, good_breeze
-- note (text, optional)
-
-RULES:
-- Always be concise, friendly, and Singapore-appropriate (light Singlish is welcome).
-- When asked to find a facility, ALWAYS call query_facilities first to get real data.
-- When asked to navigate, ALWAYS call search_location then start_navigation.
-- When updating data, confirm with the user what you changed.
-- Suggest 1–3 specific facilities with reasons. Do not make up facility names.
-- If you cannot find something, say so honestly.
+FACILITY TYPES:
+  basketball_court, badminton_court, tennis_court, volleyball_court,
+  football_field, futsal_court, fitness_corner, gym, swimming_pool,
+  playground, cycling_path, jogging_track, multi_purpose_court,
+  sheltered_pavilion, community_hall, park, skate_park
 """
 
 # ── Tool definitions (sent to Groq) ───────────────────────────────
@@ -405,13 +391,13 @@ def chat(messages: list[dict]) -> dict:
     groq_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
 
     for _ in range(5):
-        response = _groq.chat.completions.create(
+        response = _deepseek.chat.completions.create(
             model=MODEL,
             messages=groq_messages,
             tools=TOOLS,
             tool_choice="auto",
             temperature=0.7,
-            max_completion_tokens=1024,
+            max_tokens=1024,
         )
 
         choice = response.choices[0]
