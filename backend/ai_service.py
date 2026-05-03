@@ -205,9 +205,15 @@ def _run_tool(name: str, args: dict, facility_result: list) -> str:
             except ValueError:
                 limit = 10
             result = q.limit(limit).execute()
-            # Store first result so frontend can offer a "Navigate there" button
-            if result.data and facility_result[0] is None:
-                facility_result[0] = result.data[0]
+            # Collect all returned facilities (up to 5) so frontend can show selection buttons
+            if result.data:
+                seen_ids = {f["id"] for f in facility_result}
+                for fac in result.data:
+                    if len(facility_result) >= 5:
+                        break
+                    if fac["id"] not in seen_ids:
+                        facility_result.append(fac)
+                        seen_ids.add(fac["id"])
             return json.dumps(result.data)
 
         elif name == "update_facility":
@@ -256,7 +262,7 @@ def _run_tool(name: str, args: dict, facility_result: list) -> str:
 
 
 # ── Main chat function ─────────────────────────────────────────────
-def chat(messages: list[dict], location: dict | None = None) -> dict:
+def chat(messages: list[dict], location: dict | None = None, preferences: dict | None = None) -> dict:
     """
     Run the agentic tool loop for general (non-navigation) queries.
     Returns {"reply": str, "action": None}.
@@ -272,8 +278,19 @@ def chat(messages: list[dict], location: dict | None = None) -> dict:
             prompt += f"\n\nUser's current GPS location: {lat:.5f}°N, {lng:.5f}°E — use this to recommend nearby facilities and give distance estimates."
         except (KeyError, TypeError, ValueError):
             pass
+    if preferences:
+        name  = preferences.get("display_name")
+        types = preferences.get("favorite_types") or []
+        trans = preferences.get("preferred_transport")
+        if name:
+            prompt += f"\n\nUser's name: {name}. Address them by name occasionally."
+        if types:
+            readable = ", ".join(t.replace("_", " ") for t in types)
+            prompt += f"\n\nUser's favourite activities: {readable}. Prioritise these facility types in your answers."
+        if trans:
+            prompt += f"\n\nUser's preferred transport: {trans}. Mention this when relevant."
     ai_messages      = [{"role": "system", "content": prompt}] + messages
-    facility_result  = [None]  # mutable slot; _run_tool writes first facility found
+    facility_result  = []  # collects all queried facilities (up to 5) for frontend buttons
 
     for _ in range(5):
         response = _deepseek.chat.completions.create(
@@ -303,13 +320,13 @@ def chat(messages: list[dict], location: dict | None = None) -> dict:
             continue
 
         return {
-            "reply":           choice.message.content or "Sorry, I couldn't generate a response.",
-            "action":          None,
-            "primary_facility": facility_result[0],  # None if no facility was queried
+            "reply":      choice.message.content or "Sorry, I couldn't generate a response.",
+            "action":     None,
+            "facilities": facility_result if facility_result else None,
         }
 
     return {
-        "reply":           "Sorry, something went wrong after too many tool calls. Please try again.",
-        "action":          None,
-        "primary_facility": None,
+        "reply":      "Sorry, something went wrong after too many tool calls. Please try again.",
+        "action":     None,
+        "facilities": None,
     }
