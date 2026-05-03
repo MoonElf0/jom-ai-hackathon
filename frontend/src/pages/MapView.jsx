@@ -2,13 +2,13 @@
 //
 // Architecture: three isolated render trees
 //   <Navbar>     — menu open/close state lives here alone
-//   <MapArea>    — memoised; only re-renders when `facilities` changes
+//   <MapArea>    — memoised; re-renders only when facilities/route/userLocation changes
 //   <ChatSheet>  — chat open/close + messages state lives here alone
 //
-// This means clicking the menu or chat button NEVER re-renders the map,
-// which is what was causing the ~1 second interaction delay.
+// Route state is lifted to MapView so ChatSheet can write it and MapArea can read it.
+// useCallback keeps callbacks stable so memoised children don't re-render on every tick.
 
-import { useEffect, useState, useRef, memo, lazy, Suspense } from 'react'
+import { useEffect, useState, useRef, memo, lazy, Suspense, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 
@@ -16,13 +16,16 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 
 const FacilityMap = lazy(() => import('../components/FacilityMap'))
 
+// ── Travel mode metadata ──────────────────────────────────────────
+const MODE_ICONS  = { walk: '🚶', drive: '🚗', cycle: '🚲', pt: '🚌' }
+const MODE_LABELS = { walk: 'Walking', drive: 'Driving', cycle: 'Cycling', pt: 'Transit' }
+
 // ══════════════════════════════════════════════════════════════════
-// NAVBAR (isolated — menu state stays here, map never sees it)
+// NAVBAR
 // ══════════════════════════════════════════════════════════════════
 const Navbar = memo(function Navbar({ onNavigateProfile }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
-  // Close on outside tap
   useEffect(() => {
     if (!isMenuOpen) return
     const close = (e) => {
@@ -34,7 +37,6 @@ const Navbar = memo(function Navbar({ onNavigateProfile }) {
 
   return (
     <nav className="navbar">
-      {/* Hamburger / dropdown */}
       <div className="dropdown-wrapper">
         <button
           className={`btn-menu${isMenuOpen ? ' is-open' : ''}`}
@@ -60,13 +62,11 @@ const Navbar = memo(function Navbar({ onNavigateProfile }) {
         </div>
       </div>
 
-      {/* Logo */}
       <div className="navbar-logo">
         <span className="navbar-logo-text">JOM AI</span>
         <span className="navbar-logo-sub">Tampines</span>
       </div>
 
-      {/* Profile */}
       <button className="btn-profile" onClick={onNavigateProfile} aria-label="Go to profile">
         <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -78,9 +78,63 @@ const Navbar = memo(function Navbar({ onNavigateProfile }) {
 })
 
 // ══════════════════════════════════════════════════════════════════
-// MAP AREA (memoised — only re-renders when facilities list changes)
+// ROUTE PANEL — floating card showing active route summary
 // ══════════════════════════════════════════════════════════════════
-const MapArea = memo(function MapArea({ facilities, loading, error }) {
+const RoutePanel = memo(function RoutePanel({ routeInfo, onClear }) {
+  if (!routeInfo) return null
+
+  const { type, destinationName, summary, itinerary } = routeInfo
+  const dist = summary?.distance || 0
+  const distStr = dist >= 1000
+    ? `${(dist / 1000).toFixed(1)} km`
+    : dist > 0 ? `${Math.round(dist)} m` : ''
+  const durStr = summary?.duration > 0 ? `~${summary.duration} min` : ''
+
+  return (
+    <div className="route-panel" role="region" aria-label="Active route">
+      <div className="route-panel-header">
+        <span className="route-panel-mode-icon" aria-hidden="true">
+          {MODE_ICONS[type] || '📍'}
+        </span>
+        <div className="route-panel-info">
+          <p className="route-panel-dest">{destinationName}</p>
+          <p className="route-panel-meta">
+            {MODE_LABELS[type] || type}
+            {(distStr || durStr) && ' · '}
+            {distStr}
+            {distStr && durStr && ' · '}
+            {durStr}
+          </p>
+        </div>
+        <button className="route-panel-close" onClick={onClear} aria-label="Clear route">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* PT legs summary */}
+      {type === 'pt' && itinerary?.legs?.length > 0 && (
+        <div className="route-panel-legs">
+          {itinerary.legs.map((leg, i) => (
+            <span key={i} className={`route-leg-badge route-leg-${leg.mode?.toLowerCase()}`}>
+              {leg.mode === 'WALK'
+                ? '🚶 Walk'
+                : leg.mode === 'BUS'
+                  ? `🚌 ${leg.route || 'Bus'}`
+                  : `🚇 ${leg.route || 'MRT'}`}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+})
+
+// ══════════════════════════════════════════════════════════════════
+// MAP AREA — memoised; only re-renders when its props change
+// ══════════════════════════════════════════════════════════════════
+const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, userLocation, onClearRoute }) {
   return (
     <div className="map-area">
       {loading && (
@@ -100,35 +154,43 @@ const MapArea = memo(function MapArea({ facilities, loading, error }) {
       )}
 
       <Suspense fallback={null}>
-        <FacilityMap facilities={facilities} />
+        <FacilityMap
+          facilities={facilities}
+          routeInfo={routeInfo}
+          userLocation={userLocation}
+        />
       </Suspense>
+
+      {/* Route summary card floats over map */}
+      <RoutePanel routeInfo={routeInfo} onClear={onClearRoute} />
     </div>
   )
 })
 
 // ══════════════════════════════════════════════════════════════════
 // CHAT SHEET — calls Flask /api/ai/chat → Groq Llama 4 Scout
-// Maintains full conversation history so the AI has context.
+// When the AI returns a "navigate" action the sheet:
+//   1. Gets the user's live GPS position
+//   2. Calls /api/onemap/route
+//   3. Calls onRouteReady() to render the route on the map
 // ══════════════════════════════════════════════════════════════════
 const INITIAL_MESSAGES = [
   {
     id: 1,
     role: 'ai',
-    text: 'Hello! I can help you find facilities, check crowd levels, or update facility info. What do you need? 😊'
-  }
+    text: 'Hello! I can help you find facilities, check crowd levels, or navigate to any location. Try: "Take me to Tampines Hub by bus" or "Find a sheltered basketball court" 😊',
+  },
 ]
 
-const ChatSheet = memo(function ChatSheet() {
+const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
   const [isOpen, setIsOpen]     = useState(false)
   const [input, setInput]       = useState('')
   const [messages, setMessages] = useState(INITIAL_MESSAGES)
   const [isTyping, setIsTyping] = useState(false)
   const bodyRef                 = useRef(null)
   const inputRef                = useRef(null)
-
-  // Swipe-down gesture refs (plain objects, not useRef — avoids re-renders)
-  const touchStartY = useRef(null)
-  const touchCurrY  = useRef(null)
+  const touchStartY             = useRef(null)
+  const touchCurrY              = useRef(null)
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -146,61 +208,166 @@ const ChatSheet = memo(function ChatSheet() {
 
   const toggle = () => setIsOpen(v => !v)
 
+  // ── Handle navigation action from AI ──────────────────────────
+  const handleNavigationAction = async (action) => {
+    const { destination, mode } = action
+    const navMsgId = Date.now() + 10
+
+    setMessages(prev => [
+      ...prev,
+      { id: navMsgId, role: 'ai', text: 'Getting your live location…' },
+    ])
+
+    try {
+      // 1. Request GPS
+      const position = await new Promise((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout:            10000,
+          maximumAge:         30000,
+        })
+      )
+
+      const userLat = position.coords.latitude
+      const userLng = position.coords.longitude
+
+      // 2. Build date/time for PT
+      const now  = new Date()
+      const date = [
+        String(now.getMonth() + 1).padStart(2, '0'),
+        String(now.getDate()).padStart(2, '0'),
+        now.getFullYear(),
+      ].join('-')
+      const time = [
+        String(now.getHours()).padStart(2, '0'),
+        String(now.getMinutes()).padStart(2, '0'),
+        String(now.getSeconds()).padStart(2, '0'),
+      ].join(':')
+
+      // 3. Call route API
+      const params = new URLSearchParams({
+        start:     `${userLat},${userLng}`,
+        end:       `${destination.lat},${destination.lng}`,
+        routeType: mode,
+        ...(mode === 'pt' ? {
+          date,
+          time,
+          mode:             'TRANSIT',
+          maxWalkDistance:  '1000',
+          numItineraries:   '3',
+        } : {}),
+      })
+
+      const routeRes  = await fetch(`${API_BASE}/api/onemap/route?${params}`)
+      const routeData = await routeRes.json()
+
+      if (routeData.error) throw new Error(routeData.error)
+
+      // 4. Build routeInfo for the map
+      const routeInfo = { type: mode, destinationName: destination.name, destination }
+
+      if (mode === 'pt') {
+        const itin       = routeData.plan?.itineraries?.[0]
+        routeInfo.itinerary = itin
+        const totalDist  = itin?.legs?.reduce((s, l) => s + (l.distance || 0), 0) || 0
+        routeInfo.summary   = {
+          duration: Math.round((itin?.duration || 0) / 60),
+          distance: totalDist,
+        }
+      } else {
+        routeInfo.geometry    = routeData.route_geometry
+        routeInfo.summary     = {
+          duration: Math.round((routeData.route_summary?.total_time || 0) / 60),
+          distance: routeData.route_summary?.total_distance || 0,
+        }
+        routeInfo.instructions = routeData.route_instructions || []
+      }
+
+      // 5. Push to map
+      onRouteReady(routeInfo, [userLat, userLng])
+
+      // 6. Update the "Getting your location…" bubble with route summary
+      const d = routeInfo.summary.distance
+      const distStr = d >= 1000 ? `${(d / 1000).toFixed(1)} km` : d > 0 ? `${Math.round(d)} m` : ''
+      const durStr  = routeInfo.summary.duration > 0 ? `~${routeInfo.summary.duration} min` : ''
+
+      setMessages(prev => prev.map(m =>
+        m.id === navMsgId
+          ? {
+              ...m,
+              text: `Route ready on map! ${MODE_ICONS[mode]} ${distStr}${distStr && durStr ? ' · ' : ''}${durStr} to ${destination.name}. Tap the map to see directions.`,
+            }
+          : m
+      ))
+    } catch (err) {
+      const isDenied = err.code === 1  // GeolocationPositionError.PERMISSION_DENIED
+      setMessages(prev => prev.map(m =>
+        m.id === navMsgId
+          ? {
+              ...m,
+              text: isDenied
+                ? 'Location access denied. Please allow location in your browser settings and try again.'
+                : `Could not get route: ${err.message}`,
+            }
+          : m
+      ))
+    }
+  }
+
   // ── Send message to Groq via Flask backend ─────────────────────
   const sendMessage = async () => {
     const text = input.trim()
     if (!text || isTyping) return
 
-    const userMsg = { id: Date.now(), role: 'user', text }
-    // Build updated history to send (exclude the static greeting from history)
-    const updatedMessages = [...messages, userMsg]
-    setMessages(updatedMessages)
+    const userMsg        = { id: Date.now(), role: 'user', text }
+    const updatedHistory = [...messages, userMsg]
+    setMessages(updatedHistory)
     setInput('')
     setIsTyping(true)
 
-    // Convert our message format to the {role, content} format the backend expects
-    // Only send 'user' and 'assistant' roles (not our 'ai' label)
-    const historyForAPI = updatedMessages
-      .filter(m => m.role === 'user' || m.role === 'assistant')
-      .map(m => ({ role: m.role, content: m.text }))
-
-    // If no prior assistant messages, the last item is just the user message
-    // which is correct — the backend will respond as assistant
+    // Build API payload: only real user/assistant turns (skip static greeting)
     const payload = [
-      // Re-map our internal 'ai' role to 'assistant' for the API
       ...messages
-        .filter(m => m.role === 'ai' || m.role === 'user')
-        .filter(m => m.id !== 1) // skip the initial greeting (not real history)
+        .filter(m => m.id !== 1 && (m.role === 'ai' || m.role === 'user'))
         .map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.text })),
-      { role: 'user', content: text }
+      { role: 'user', content: text },
     ]
 
     try {
       const res = await fetch(`${API_BASE}/api/ai/chat`, {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: payload }),
+        body:    JSON.stringify({ messages: payload }),
       })
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || `Server error ${res.status}`)
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Server error ${res.status}`)
       }
 
       const data = await res.json()
+
+      // Show AI text reply
       setMessages(prev => [
         ...prev,
-        { id: Date.now() + 1, role: 'ai', text: data.reply }
+        { id: Date.now() + 1, role: 'ai', text: data.reply },
       ])
+
+      // Trigger navigation if AI called start_navigation
+      if (data.action?.type === 'navigate') {
+        await handleNavigationAction(data.action)
+      }
     } catch (err) {
-      console.error('Chat error:', err)
+      const isNetworkErr = err instanceof TypeError
       setMessages(prev => [
         ...prev,
         {
-          id: Date.now() + 1,
+          id:   Date.now() + 1,
           role: 'ai',
-          text: `Sorry, I couldn't reach the server. Make sure the Flask backend is running on ${API_BASE}. (${err.message})`
-        }
+          text: isNetworkErr
+            ? `Cannot reach the backend. Make sure Flask is running on ${API_BASE}.`
+            : `Something went wrong: ${err.message}`,
+        },
       ])
     } finally {
       setIsTyping(false)
@@ -219,14 +386,12 @@ const ChatSheet = memo(function ChatSheet() {
 
   return (
     <>
-      {/* Tap-outside scrim */}
       <div
         className={`chat-scrim${isOpen ? ' is-open' : ''}`}
         onClick={() => setIsOpen(false)}
         aria-hidden="true"
       />
 
-      {/* Bottom sheet */}
       <div
         className={`chat-sheet${isOpen ? ' is-open' : ''}`}
         onTouchStart={onTouchStart}
@@ -235,7 +400,6 @@ const ChatSheet = memo(function ChatSheet() {
         role="dialog"
         aria-label="JOM AI Chat"
       >
-        {/* Drag handle */}
         <div
           className="chat-handle"
           onClick={toggle}
@@ -247,14 +411,12 @@ const ChatSheet = memo(function ChatSheet() {
           <div className="chat-handle-pill" />
         </div>
 
-        {/* Header */}
         <div className="chat-header">
           <div className="chat-header-dot" aria-hidden="true" />
           <span className="chat-header-title">JOM AI</span>
           <span className="chat-header-sub">Powered by Llama 4 · Tampines</span>
         </div>
 
-        {/* Messages */}
         <div className="chat-body" ref={bodyRef}>
           {messages.map(msg => (
             <div key={msg.id} className={`chat-bubble ${msg.role}`}>
@@ -263,7 +425,6 @@ const ChatSheet = memo(function ChatSheet() {
             </div>
           ))}
 
-          {/* Typing indicator */}
           {isTyping && (
             <div className="chat-bubble ai">
               <div className="chat-bubble-sender">JOM AI</div>
@@ -274,13 +435,12 @@ const ChatSheet = memo(function ChatSheet() {
           )}
         </div>
 
-        {/* Input */}
         <div className="chat-input-area">
           <input
             ref={inputRef}
             className="chat-input"
             type="text"
-            placeholder="Ask JOM AI…"
+            placeholder="Ask JOM AI or say 'Take me to…'"
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && sendMessage()}
@@ -309,14 +469,26 @@ const ChatSheet = memo(function ChatSheet() {
 })
 
 // ══════════════════════════════════════════════════════════════════
-// MAP VIEW — orchestrates data fetching only; no UI state here
+// MAP VIEW — orchestrates data fetching and route state
 // ══════════════════════════════════════════════════════════════════
 export default function MapView() {
   const navigate = useNavigate()
 
-  const [facilities, setFacilities] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [facilities,    setFacilities]    = useState([])
+  const [loading,       setLoading]       = useState(true)
+  const [error,         setError]         = useState(null)
+  const [routeInfo,     setRouteInfo]     = useState(null)
+  const [userLocation,  setUserLocation]  = useState(null)
+
+  // Stable callbacks — won't change reference across renders
+  const onRouteReady = useCallback((route, userLoc) => {
+    setRouteInfo(route)
+    setUserLocation(userLoc)
+  }, [])
+
+  const onClearRoute = useCallback(() => {
+    setRouteInfo(null)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -343,8 +515,15 @@ export default function MapView() {
   return (
     <div className="map-page">
       <Navbar onNavigateProfile={() => navigate('/profile')} />
-      <MapArea facilities={facilities} loading={loading} error={error} />
-      <ChatSheet />
+      <MapArea
+        facilities={facilities}
+        loading={loading}
+        error={error}
+        routeInfo={routeInfo}
+        userLocation={userLocation}
+        onClearRoute={onClearRoute}
+      />
+      <ChatSheet onRouteReady={onRouteReady} />
     </div>
   )
 }
