@@ -1,17 +1,33 @@
-// src/App.jsx
-// Sets up React Router — each URL path maps to a page component.
-// Right now we only have MapView. More pages get added here later.
-
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import MapView from './pages/MapView'
+import { useAuth } from './utils/useAuth'
+import MapView          from './pages/MapView'
+import AuthPage         from './pages/AuthPage'
+import ProfilePage      from './pages/ProfilePage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
+
+function RequireAuth({ children }) {
+  const { user, loading } = useAuth()
+  if (loading) return <div className="auth-loading"><div className="auth-loading-spinner" /></div>
+  if (!user)   return <Navigate to="/auth" replace />
+  return children
+}
+
+function RedirectIfAuthed({ children }) {
+  const { user, loading } = useAuth()
+  if (loading) return <div className="auth-loading"><div className="auth-loading-spinner" /></div>
+  if (user)    return <Navigate to="/map" replace />
+  return children
+}
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Default route → redirect to /map */}
         <Route path="/" element={<Navigate to="/map" replace />} />
-        <Route path="/map" element={<MapView />} />
+        <Route path="/auth"           element={<RedirectIfAuthed><AuthPage /></RedirectIfAuthed>} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/map"            element={<RequireAuth><MapView /></RequireAuth>} />
+        <Route path="/profile"        element={<RequireAuth><ProfilePage /></RequireAuth>} />
       </Routes>
     </BrowserRouter>
   )

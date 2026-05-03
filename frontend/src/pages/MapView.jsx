@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef, memo, lazy, Suspense, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
+import { useAuth } from '../utils/useAuth'
+import { isInTampines } from '../utils/tampinesBoundary'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 
@@ -20,11 +22,52 @@ const TRANSPORT_MODES = [
   { label: '🚗 Drive',      value: 'drive' },
 ]
 
-// Matches navigation intent in typed text
-const NAV_REGEX = /\b(go to|take me|get me|navigate|direction|how (do|to) (i |get to|reach)|get to|route to|way to|bring me|head to)\b/i
+// Fallback origin for users outside Tampines
+const TAMPINES_MRT_LAT = 1.35468
+const TAMPINES_MRT_LNG = 103.94565
 
-// Extracts destination from "go to X" / "take me to X" / "get me to X" style phrases
-const NAV_WITH_DEST = /^(?:go|take me|get me|navigate|bring me|head|get)\s+(?:to|towards?|me to)\s+(.+)/i
+// Matches navigation intent in typed text
+const NAV_REGEX = /\b(go to|take me|get me|navigate|direction|how (do|to) (i |get to|reach)|get to|route to|way to|bring me|head to|want(?:na)? to (?:go|navigate)|wanna go|want to go)\b/i
+
+// Extracts destination from various navigation phrases (not anchored — works mid-sentence)
+const NAV_WITH_DEST = /(?:(?:go|take me|get me|navigate|bring me|head|get)\s+(?:to|towards?|me to)|(?:want(?:na)?\s+to\s+(?:go|navigate)(?:\s+to)?|wanna\s+go(?:\s+to)?))\s+(.+)/i
+
+// Maps user-typed facility keywords to Supabase type values
+const FACILITY_TYPE_MAP = {
+  'basketball':          'basketball_court',
+  'basketball court':    'basketball_court',
+  'badminton':           'badminton_court',
+  'badminton court':     'badminton_court',
+  'tennis':              'tennis_court',
+  'tennis court':        'tennis_court',
+  'volleyball':          'volleyball_court',
+  'volleyball court':    'volleyball_court',
+  'football':            'football_field',
+  'soccer':              'football_field',
+  'futsal':              'futsal_court',
+  'futsal court':        'futsal_court',
+  'gym':                 'gym',
+  'fitness':             'fitness_corner',
+  'fitness corner':      'fitness_corner',
+  'swimming':            'swimming_pool',
+  'swim':                'swimming_pool',
+  'pool':                'swimming_pool',
+  'swimming pool':       'swimming_pool',
+  'playground':          'playground',
+  'jogging':             'jogging_track',
+  'jogging track':       'jogging_track',
+  'running track':       'jogging_track',
+  'cycling':             'cycling_path',
+  'cycling path':        'cycling_path',
+  'mpc':                 'multi_purpose_court',
+  'multi purpose court': 'multi_purpose_court',
+  'skate':               'skate_park',
+  'skate park':          'skate_park',
+}
+
+function detectFacilityType(query) {
+  return FACILITY_TYPE_MAP[query.toLowerCase().trim()] || null
+}
 
 // ── Stable message ID counter ─────────────────────────────────────
 let _msgIdCounter = 100
@@ -76,7 +119,7 @@ function stripNavPrefix(text) {
 // ══════════════════════════════════════════════════════════════════
 // NAVBAR
 // ══════════════════════════════════════════════════════════════════
-const Navbar = memo(function Navbar({ onNavigateProfile }) {
+const Navbar = memo(function Navbar({ onNavigateProfile, onSignOut }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -109,7 +152,7 @@ const Navbar = memo(function Navbar({ onNavigateProfile }) {
           <button className="dropdown-item" onClick={() => setIsMenuOpen(false)} role="menuitem">
             Saved Areas
           </button>
-          <button className="dropdown-item danger" onClick={() => setIsMenuOpen(false)} role="menuitem">
+          <button className="dropdown-item danger" onClick={onSignOut} role="menuitem">
             Log Out
           </button>
         </div>
@@ -167,7 +210,7 @@ function buildPTSteps(legs) {
 const RoutePanel = memo(function RoutePanel({ routeInfo, onClear }) {
   const [showSteps, setShowSteps] = useState(false)
 
-  const { type, destinationName, summary, itinerary, instructions } = routeInfo || {}
+  const { type, destinationName, summary, itinerary, instructions, notice } = routeInfo || {}
   const dist    = summary?.distance || 0
   const distStr = dist >= 1000 ? `${(dist / 1000).toFixed(1)} km` : dist > 0 ? `${Math.round(dist)} m` : ''
   const durStr  = summary?.duration > 0 ? `~${summary.duration} min` : ''
@@ -194,6 +237,10 @@ const RoutePanel = memo(function RoutePanel({ routeInfo, onClear }) {
           </svg>
         </button>
       </div>
+
+      {notice && (
+        <p className="route-panel-notice">{notice}</p>
+      )}
 
       {type === 'pt' && itinerary?.legs?.length > 0 && (
         <div className="route-panel-legs">
@@ -242,7 +289,7 @@ const RoutePanel = memo(function RoutePanel({ routeInfo, onClear }) {
 // ══════════════════════════════════════════════════════════════════
 // MAP AREA
 // ══════════════════════════════════════════════════════════════════
-const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, userLocation, onClearRoute }) {
+const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, userLocation, onClearRoute, onNavigateTo, user, savedFacilityIds, onSaveToggle }) {
   return (
     <div className="map-area">
       {loading && (
@@ -260,7 +307,15 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
         </div>
       )}
       <Suspense fallback={null}>
-        <FacilityMap facilities={facilities} routeInfo={routeInfo} userLocation={userLocation} />
+        <FacilityMap
+          facilities={facilities}
+          routeInfo={routeInfo}
+          userLocation={userLocation}
+          onNavigateTo={onNavigateTo}
+          user={user}
+          savedFacilityIds={savedFacilityIds}
+          onSaveToggle={onSaveToggle}
+        />
       </Suspense>
       <RoutePanel routeInfo={routeInfo} onClear={onClearRoute} />
     </div>
@@ -281,12 +336,12 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
 // Navigation NEVER touches the AI.
 // Location is polled every 30 s for proximity sorting + AI context.
 // ══════════════════════════════════════════════════════════════════
-const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
+const ChatSheet = memo(function ChatSheet({ onRouteReady, defaultNavMode = 'pt', userProfile = null }) {
   const [isOpen,    setIsOpen]    = useState(false)
   const [messages,  setMessages]  = useState(() => [mkGreeting()])
   const [flowState, setFlowState] = useState('idle')
   const [navDest,   setNavDest]   = useState(null)
-  const [navMode,   setNavMode]   = useState('pt')
+  const [navMode,   setNavMode]   = useState(defaultNavMode)
   const [input,     setInput]     = useState('')
   const [isTyping,  setIsTyping]  = useState(false)
   const bodyRef      = useRef(null)
@@ -295,6 +350,9 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
   const touchCurrY   = useRef(null)
   // Live location — useRef so location ticks don't cause re-renders
   const userLatLngRef = useRef(null)
+
+  // Sync preferred transport when user profile loads
+  useEffect(() => { setNavMode(defaultNavMode) }, [defaultNavMode])
 
   // ── Poll GPS every 30 s ──────────────────────────────────────────
   useEffect(() => {
@@ -320,7 +378,7 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
 
   // Focus input (not during button-only states)
   useEffect(() => {
-    const noInput = flowState === 'nav_mode' || flowState === 'nav_confirm' || flowState === 'routing'
+    const noInput = flowState === 'nav_mode' || flowState === 'routing'
     if (isOpen && !noInput) setTimeout(() => inputRef.current?.focus(), 450)
   }, [isOpen, flowState])
 
@@ -361,59 +419,97 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
       .filter((r, i, arr) => arr.findIndex(x => x.name === r.name) === i)
   }
 
-  // ── Search with fallbacks + proximity sort ───────────────────────
+  // ── Search with fallbacks + proximity sort, restricted to Tampines ─
   async function searchDest(rawQuery) {
     const base = stripNavPrefix(rawQuery)
     if (!base) return []
 
-    // Try searches in order, stop at first non-empty batch
+    // Append "Tampines" to bias OneMap results toward the area
     const attempts = [
+      `${base} Tampines`,
       base,
       `${base} Singapore`,
-      !base.match(/\b(mrt|lrt|station|bus)\b/i) ? `${base} MRT` : null,
-      !base.match(/\b(park|garden)\b/i) ? `${base} PARK` : null,
+      !base.match(/\b(mrt|lrt|station|bus)\b/i) ? `${base} MRT Tampines` : null,
     ]
 
     for (const q of attempts) {
       if (!q) continue
       const results = await oneMapSearch(q)
-      if (results.length) {
+      // Keep only results that fall inside the Tampines boundary polygon
+      const inTampines = results.filter(r => isInTampines(r.lat, r.lng))
+      if (inTampines.length) {
         const loc = userLatLngRef.current
         if (loc) {
-          results.sort((a, b) =>
+          inTampines.sort((a, b) =>
             distKm(loc[0], loc[1], a.lat, a.lng) - distKm(loc[0], loc[1], b.lat, b.lng)
           )
         }
-        return results.slice(0, 5)
+        return inTampines.slice(0, 5)
       }
     }
     return []
   }
 
-  // ── Search + always pick the closest result → transport mode buttons ──
+  // ── Search + show results as buttons ────────────────────────────
+  // If query matches a facility type keyword → query Supabase and show pick buttons.
+  // Otherwise → OneMap search and go straight to transport mode (single top result).
   async function runDestSearch(destQuery) {
     setIsTyping(true)
     try {
-      const results = await searchDest(destQuery)
-      if (!results.length) {
-        addMsg({
-          role: 'ai',
-          text: `Couldn't find "${destQuery.slice(0, 40)}". Try a landmark name, add "MRT", or rephrase.`,
-        })
-        setFlowState('nav_dest')
+      const facilityType = detectFacilityType(destQuery)
+
+      if (facilityType) {
+        // Direct Supabase query — no AI, no OneMap
+        const { data } = await supabase
+          .from('facilities')
+          .select('id, name, type, address, lat, lng')
+          .eq('type', facilityType)
+          .limit(10)
+
+        const loc     = userLatLngRef.current
+        const results = (data || [])
+          .filter(f => f.lat && f.lng && isInTampines(f.lat, f.lng))
+          .sort((a, b) => loc
+            ? distKm(loc[0], loc[1], a.lat, a.lng) - distKm(loc[0], loc[1], b.lat, b.lng)
+            : 0
+          )
+          .slice(0, 5)
+
+        if (!results.length) {
+          addMsg({ role: 'ai', text: `No ${destQuery} found in Tampines lah. Try another facility?` })
+          setFlowState('nav_dest')
+        } else {
+          setFlowState('nav_mode')
+          addMsg({
+            role:    'ai',
+            text:    `Found ${results.length} ${destQuery}${results.length > 1 ? 's' : ''} nearby. Pick one:`,
+            buttons: results.map(f => ({
+              label: `📍 ${f.name}`,
+              value: `__dest__${JSON.stringify({ lat: f.lat, lng: f.lng, name: f.name })}`,
+            })),
+          })
+        }
       } else {
-        // Always take the top result (already sorted by proximity).
-        // No disambiguation — keeps the flow button-driven.
-        const dest       = results[0]
-        const addrSuffix = dest.address && dest.address !== dest.name
-          ? `\n${dest.address}` : ''
-        setNavDest(dest)
-        setFlowState('nav_mode')
-        addMsg({
-          role:    'ai',
-          text:    `Found: ${dest.name}${addrSuffix}\n\nHow would you like to get there?`,
-          buttons: TRANSPORT_MODES.map(m => ({ label: m.label, value: `__mode__${m.value}` })),
-        })
+        // OneMap search — always pick closest result
+        const results = await searchDest(destQuery)
+        if (!results.length) {
+          addMsg({
+            role: 'ai',
+            text: `Couldn't find "${destQuery.slice(0, 40)}" in Tampines lah. I only support destinations within Tampines — try a block number, road name, or landmark here.`,
+          })
+          setFlowState('nav_dest')
+        } else {
+          const dest       = results[0]
+          const addrSuffix = dest.address && dest.address !== dest.name
+            ? `\n${dest.address}` : ''
+          setNavDest(dest)
+          setFlowState('nav_mode')
+          addMsg({
+            role:    'ai',
+            text:    `Found: ${dest.name}${addrSuffix}\n\nHow would you like to get there?`,
+            buttons: TRANSPORT_MODES.map(m => ({ label: m.label, value: `__mode__${m.value}` })),
+          })
+        }
       }
     } catch {
       addMsg({ role: 'ai', text: 'Search failed. Check your connection and try again.' })
@@ -431,9 +527,20 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
           enableHighAccuracy: true, timeout: 10000, maximumAge: 30000,
         })
       )
-      const userLat = position.coords.latitude
-      const userLng = position.coords.longitude
-      userLatLngRef.current = [userLat, userLng]
+      const rawLat = position.coords.latitude
+      const rawLng = position.coords.longitude
+      userLatLngRef.current = [rawLat, rawLng]
+
+      let userLat = rawLat
+      let userLng = rawLng
+      if (!isInTampines(rawLat, rawLng)) {
+        userLat = TAMPINES_MRT_LAT
+        userLng = TAMPINES_MRT_LNG
+        addMsg({
+          role: 'ai',
+          text: "You're outside Tampines lah — I only support Tampines residents! Routing from Tampines MRT instead.",
+        })
+      }
 
       const now  = new Date()
       const date = [String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0'), now.getFullYear()].join('-')
@@ -451,10 +558,29 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
       const routeInfo = { type: mode, destinationName: dest.name, destination: dest }
       if (mode === 'pt') {
         const itin = routeData.plan?.itineraries?.[0]
-        if (!itin?.legs?.length) throw new Error('No PT route found.')
-        routeInfo.itinerary = itin
-        const totalDist = itin.legs.reduce((s, l) => s + (l.distance || 0), 0)
-        routeInfo.summary = { duration: Math.round((itin.duration || 0) / 60), distance: totalDist }
+        const hasTransit = itin?.legs?.some(l => l.mode && l.mode !== 'WALK')
+
+        if (!hasTransit) {
+          // No transit legs — off-hours or no service. Fall back to walk.
+          addMsg({ role: 'ai', text: 'Bus and MRT service is not available at this hour — public transport in Singapore typically stops operating past midnight and resumes around 5:30 AM. Showing walking route instead lah.' })
+          const walkParams = new URLSearchParams({
+            start: `${userLat},${userLng}`, end: `${dest.lat},${dest.lng}`, routeType: 'walk',
+          })
+          const walkRes  = await fetch(`${API_BASE}/api/onemap/route?${walkParams}`)
+          const walkData = await walkRes.json()
+          if (!walkData.route_geometry) throw new Error('No route found.')
+          routeInfo.type         = 'walk'
+          routeInfo.geometry     = walkData.route_geometry
+          routeInfo.summary      = {
+            duration: Math.round((walkData.route_summary?.total_time || 0) / 60),
+            distance: walkData.route_summary?.total_distance || 0,
+          }
+          routeInfo.instructions = walkData.route_instructions || []
+        } else {
+          routeInfo.itinerary = itin
+          const totalDist = itin.legs.reduce((s, l) => s + (l.distance || 0), 0)
+          routeInfo.summary = { duration: Math.round((itin.duration || 0) / 60), distance: totalDist }
+        }
       } else {
         if (!routeData.route_geometry) throw new Error('No route geometry returned.')
         routeInfo.geometry     = routeData.route_geometry
@@ -503,46 +629,22 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
       setMessages(prev => [...prev, mkGreeting()])
       return
     }
-    if (value === '__change_mode__') {
-      setFlowState('nav_mode')
-      addMsg({
-        role:    'ai',
-        text:    'Choose a different transport mode:',
-        buttons: TRANSPORT_MODES.map(m => ({ label: m.label, value: `__mode__${m.value}` })),
-      })
-      return
-    }
-    if (value === '__confirm__') {
+    if (value.startsWith('__mode__')) {
+      const mode      = value.replace('__mode__', '')
+      const modeLabel = TRANSPORT_MODES.find(m => m.value === mode)?.label || mode
+      setNavMode(mode)
+      addMsg({ role: 'user', text: modeLabel })
       setFlowState('routing')
       const dest   = navDest
-      const mode   = navMode
       const loadId = nextId()
       setMessages(prev => [...prev, { id: loadId, role: 'ai', text: 'Getting your location…' }])
       await doRoute(dest, mode, loadId)
-      // Close sheet so the user can see the route on the map
       setIsOpen(false)
       inputRef.current?.blur()
       setFlowState('idle')
       setNavDest(null)
       setNavMode('pt')
       setMessages(prev => [...prev, mkGreeting()])
-      return
-    }
-    if (value.startsWith('__mode__')) {
-      const mode      = value.replace('__mode__', '')
-      const modeLabel = TRANSPORT_MODES.find(m => m.value === mode)?.label || mode
-      setNavMode(mode)
-      addMsg({ role: 'user', text: modeLabel })
-      setFlowState('nav_confirm')
-      addMsg({
-        role:    'ai',
-        text:    `Go to ${navDest?.name} by ${modeLabel.replace(/^[\S]+\s/, '')}?`,
-        buttons: [
-          { label: '✅ Yes, go!',    value: '__confirm__'    },
-          { label: '🔄 Change mode', value: '__change_mode__' },
-          { label: '✕ Cancel',       value: '__cancel__'     },
-        ],
-      })
       return
     }
     if (value.startsWith('__dest__')) {
@@ -589,7 +691,7 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
     if (!text || isTyping) return
 
     // Navigation flow is button-driven — never accept typed input during these states
-    if (flowState === 'nav_mode' || flowState === 'nav_confirm' || flowState === 'routing') return
+    if (flowState === 'nav_mode' || flowState === 'routing') return
 
     setInput('')
 
@@ -607,8 +709,9 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
         const destMatch = text.match(NAV_WITH_DEST)
         if (destMatch) {
           // Extract destination from the phrase and search immediately
+          const destQuery = (destMatch[1] || '').trim()
           setFlowState('nav_dest')
-          await runDestSearch(destMatch[1].trim())
+          await runDestSearch(destQuery)
         } else {
           // Just nav intent, no destination yet
           setFlowState('nav_dest')
@@ -637,7 +740,12 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           messages: payload,
-          location: loc ? { lat: loc[0], lng: loc[1] } : null,
+          location:    loc ? { lat: loc[0], lng: loc[1] } : null,
+          preferences: userProfile ? {
+            display_name:        userProfile.display_name,
+            favorite_types:      userProfile.favorite_types,
+            preferred_transport: userProfile.preferred_transport,
+          } : null,
         }),
       })
       if (!res.ok) {
@@ -647,15 +755,12 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
       const data    = await res.json()
       const aiMsg   = { role: 'ai', text: formatReply(data.reply) }
 
-      // If AI found a specific facility, attach a Navigate button
-      // so the user never has to type the destination twice
-      if (data.primary_facility) {
-        const fac  = data.primary_facility
-        const dest = { lat: fac.lat, lng: fac.lng, name: fac.name }
-        aiMsg.buttons = [{
-          label: `🗺️ Navigate to ${fac.name}`,
-          value: `__nav_to_fac__${JSON.stringify(dest)}`,
-        }]
+      // If AI found facilities, show one Navigate button per result so user can choose
+      if (data.facilities && data.facilities.length > 0) {
+        aiMsg.buttons = data.facilities.map(fac => ({
+          label: `🗺️ ${fac.name}`,
+          value: `__nav_to_fac__${JSON.stringify({ lat: fac.lat, lng: fac.lng, name: fac.name })}`,
+        }))
       }
       addMsg(aiMsg)
     } catch (err) {
@@ -668,7 +773,7 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
     }
   }
 
-  const showInput = flowState !== 'nav_mode' && flowState !== 'nav_confirm' && flowState !== 'routing'
+  const showInput = flowState !== 'nav_mode' && flowState !== 'routing'
 
   const onTouchStart = (e) => { touchStartY.current = e.touches[0].clientY }
   const onTouchMove  = (e) => { if (touchStartY.current) touchCurrY.current = e.touches[0].clientY }
@@ -787,13 +892,22 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
 // MAP VIEW
 // ══════════════════════════════════════════════════════════════════
 export default function MapView() {
-  const navigate = useNavigate()
+  const navigate     = useNavigate()
+  const { user }     = useAuth()
 
-  const [facilities,   setFacilities]   = useState([])
-  const [loading,      setLoading]      = useState(true)
-  const [error,        setError]        = useState(null)
-  const [routeInfo,    setRouteInfo]    = useState(null)
-  const [userLocation, setUserLocation] = useState(null)
+  const [facilities,       setFacilities]       = useState([])
+  const [loading,          setLoading]          = useState(true)
+  const [error,            setError]            = useState(null)
+  const [routeInfo,        setRouteInfo]        = useState(null)
+  const [userLocation,     setUserLocation]     = useState(null)
+  const [userProfile,      setUserProfile]      = useState(null)
+  const [savedFacilityIds, setSavedFacilityIds] = useState(new Set())
+
+  // Filter to only facilities actually inside the Tampines boundary polygon
+  const tampinesFacilities = useMemo(
+    () => facilities.filter(f => f.lat && f.lng && isInTampines(f.lat, f.lng)),
+    [facilities]
+  )
 
   const onRouteReady = useCallback((route, userLoc) => {
     setRouteInfo(null)
@@ -804,6 +918,109 @@ export default function MapView() {
   }, [])
 
   const onClearRoute = useCallback(() => setRouteInfo(null), [])
+
+  // ── Load user profile + saved facility IDs when user changes ──
+  useEffect(() => {
+    if (!user) { setUserProfile(null); setSavedFacilityIds(new Set()); return }
+    async function loadUserData() {
+      const [profRes, savedRes] = await Promise.all([
+        supabase.from('user_profiles').select('*').eq('id', user.id).single(),
+        supabase.from('saved_facilities').select('facility_id').eq('user_id', user.id),
+      ])
+      if (profRes.data)  setUserProfile(profRes.data)
+      if (savedRes.data) setSavedFacilityIds(new Set(savedRes.data.map(r => r.facility_id)))
+    }
+    loadUserData()
+  }, [user])
+
+  // ── Toggle save/unsave a facility ─────────────────────────────
+  const onSaveToggle = useCallback(async (facility) => {
+    if (!user) return
+    const isSaved = savedFacilityIds.has(facility.id)
+    if (isSaved) {
+      await supabase.from('saved_facilities')
+        .delete().eq('user_id', user.id).eq('facility_id', facility.id)
+      setSavedFacilityIds(prev => { const s = new Set(prev); s.delete(facility.id); return s })
+    } else {
+      await supabase.from('saved_facilities').insert({ user_id: user.id, facility_id: facility.id })
+      setSavedFacilityIds(prev => new Set([...prev, facility.id]))
+    }
+  }, [user, savedFacilityIds])
+
+  // Called when user taps "Route here" on a map facility popup
+  const routeFromUserTo = useCallback(async (facility) => {
+    try {
+      const position = await new Promise((res, rej) =>
+        navigator.geolocation.getCurrentPosition(res, rej, {
+          enableHighAccuracy: true, timeout: 10000, maximumAge: 30000,
+        })
+      )
+      let userLat = position.coords.latitude
+      let userLng = position.coords.longitude
+      if (!isInTampines(userLat, userLng)) {
+        userLat = TAMPINES_MRT_LAT
+        userLng = TAMPINES_MRT_LNG
+      }
+
+      const now  = new Date()
+      const date = [String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0'), now.getFullYear()].join('-')
+      const time = [String(now.getHours()).padStart(2, '0'), String(now.getMinutes()).padStart(2, '0'), String(now.getSeconds()).padStart(2, '0')].join(':')
+
+      const params = new URLSearchParams({
+        start: `${userLat},${userLng}`,
+        end:   `${facility.lat},${facility.lng}`,
+        routeType: 'pt',
+        date, time,
+        mode: 'TRANSIT', maxWalkDistance: '1000', numItineraries: '3',
+      })
+
+      const res  = await fetch(`${API_BASE}/api/onemap/route?${params}`)
+      const data = await res.json()
+      const itin = data.plan?.itineraries?.[0]
+
+      const dest = { lat: facility.lat, lng: facility.lng, name: facility.name }
+
+      if (!itin?.legs?.length || !itin.legs.some(l => l.mode && l.mode !== 'WALK')) {
+        // No transit available (off-hours) — fall back to walk route
+        const walkParams = new URLSearchParams({
+          start: `${userLat},${userLng}`, end: `${facility.lat},${facility.lng}`, routeType: 'walk',
+        })
+        const walkRes  = await fetch(`${API_BASE}/api/onemap/route?${walkParams}`)
+        const walkData = await walkRes.json()
+        if (!walkData.route_geometry) return
+        onRouteReady(
+          {
+            type:         'walk',
+            destinationName: facility.name,
+            destination:  dest,
+            geometry:     walkData.route_geometry,
+            summary:      {
+              duration: Math.round((walkData.route_summary?.total_time || 0) / 60),
+              distance: walkData.route_summary?.total_distance || 0,
+            },
+            instructions: walkData.route_instructions || [],
+            notice: 'Bus/MRT not operating at this hour (resumes ~5:30 AM). Showing walk route.',
+          },
+          [userLat, userLng]
+        )
+        return
+      }
+
+      const totalDist = itin.legs.reduce((s, l) => s + (l.distance || 0), 0)
+      onRouteReady(
+        {
+          type: 'pt',
+          destinationName: facility.name,
+          destination:     dest,
+          itinerary:       itin,
+          summary:         { duration: Math.round((itin.duration || 0) / 60), distance: totalDist },
+        },
+        [userLat, userLng]
+      )
+    } catch {
+      // silently ignore — user can always use the chat flow instead
+    }
+  }, [onRouteReady])
 
   useEffect(() => {
     let cancelled = false
@@ -827,18 +1044,31 @@ export default function MapView() {
     return () => { cancelled = true }
   }, [])
 
+  async function handleSignOut() {
+    await supabase.auth.signOut()
+    navigate('/auth', { replace: true })
+  }
+
   return (
     <div className="map-page">
-      <Navbar onNavigateProfile={() => navigate('/profile')} />
+      <Navbar onNavigateProfile={() => navigate('/profile')} onSignOut={handleSignOut} />
       <MapArea
-        facilities={facilities}
+        facilities={tampinesFacilities}
         loading={loading}
         error={error}
         routeInfo={routeInfo}
         userLocation={userLocation}
         onClearRoute={onClearRoute}
+        onNavigateTo={routeFromUserTo}
+        user={user}
+        savedFacilityIds={savedFacilityIds}
+        onSaveToggle={onSaveToggle}
       />
-      <ChatSheet onRouteReady={onRouteReady} />
+      <ChatSheet
+        onRouteReady={onRouteReady}
+        defaultNavMode={userProfile?.preferred_transport || 'pt'}
+        userProfile={userProfile}
+      />
     </div>
   )
 }
