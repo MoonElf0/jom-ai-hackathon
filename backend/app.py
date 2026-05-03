@@ -149,7 +149,6 @@ def onemap_route():
             "start":     start,
             "end":       end,
             "routeType": route_type,
-            "token":     token,
         }
         if route_type == "pt":
             params["date"]            = request.args.get("date", "")
@@ -161,6 +160,7 @@ def onemap_route():
         resp = req.get(
             "https://www.onemap.gov.sg/api/public/routingsvc/route",
             params=params,
+            headers={"Authorization": token},
             timeout=15,
         )
         return jsonify(resp.json()), resp.status_code

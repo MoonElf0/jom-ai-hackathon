@@ -831,7 +831,93 @@ input {
 }
 
 .route-leg-badge.route-leg-walk   { background: #f1f5f9; color: #475569; }
-.route-leg-badge.route-leg-bus    { background: #fef3c7; color: #92400e; }
+.route-leg-badge.route-leg-bus    { background: #dcfce7; color: #14532d; }
 .route-leg-badge.route-leg-subway,
-.route-leg-badge.route-leg-rail   { background: #dbeafe; color: #1d4ed8; }
-.route-leg-badge.route-leg-tram   { background: #dcfce7; color: #15803d; }
+.route-leg-badge.route-leg-rail   { background: #ede9fe; color: #5b21b6; }
+.route-leg-badge.route-leg-tram   { background: #fef3c7; color: #92400e; }
+
+/* Show-directions toggle button */
+.route-steps-toggle {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 5px 0;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border, #e2e8f0);
+  color: var(--text-muted, #64748b);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  text-align: center;
+  transition: color 0.15s;
+}
+.route-steps-toggle:hover { color: var(--text, #1e293b); }
+
+/* Step list container */
+.route-steps {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+/* Individual step row */
+.route-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.route-step-walk   { background: #f0fdf4; }
+.route-step-bus    { background: #dcfce7; }
+.route-step-subway,
+.route-step-rail   { background: #bbf7d0; }
+.route-step-tram   { background: #f0fdf4; }
+
+.route-step-icon {
+  font-size: 15px;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+/* Numbered circle for walking steps */
+.route-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.route-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.route-step-action {
+  font-weight: 600;
+  color: var(--text, #1e293b);
+  line-height: 1.35;
+}
+
+.route-step-detail {
+  font-size: 11px;
+  color: var(--text-muted, #64748b);
+}

@@ -8,7 +8,7 @@
 // Route state is lifted to MapView so ChatSheet can write it and MapArea can read it.
 // useCallback keeps callbacks stable so memoised children don't re-render on every tick.
 
-import { useEffect, useState, useRef, memo, lazy, Suspense, useCallback } from 'react'
+import { useEffect, useState, useRef, memo, lazy, Suspense, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 
@@ -77,18 +77,65 @@ const Navbar = memo(function Navbar({ onNavigateProfile }) {
   )
 })
 
+// ── Build step list for a PT itinerary ───────────────────────────
+function buildPTSteps(legs) {
+  if (!legs?.length) return []
+  return legs.map((leg) => {
+    const dist = leg.distance
+      ? leg.distance >= 1000
+        ? `${(leg.distance / 1000).toFixed(1)} km`
+        : `${Math.round(leg.distance)} m`
+      : ''
+
+    if (leg.mode === 'WALK') {
+      return {
+        mode:   'WALK',
+        icon:   '🚶',
+        action: `Walk ${dist} to ${leg.to?.name || 'next stop'}`,
+        detail: null,
+      }
+    }
+    if (leg.mode === 'BUS') {
+      const stops = (leg.intermediateStops?.length || 0) + 2
+      return {
+        mode:   'BUS',
+        icon:   '🚌',
+        action: `Bus ${leg.route || '–'}: ${leg.from?.name || ''} → ${leg.to?.name || ''}`,
+        detail: `${stops} stop${stops !== 1 ? 's' : ''} · ${dist}`,
+      }
+    }
+    // SUBWAY / RAIL / TRAM
+    const stops    = (leg.intermediateStops?.length || 0) + 2
+    const fromName = (leg.from?.name || '').replace(/ MRT STATION$/, '')
+    const toName   = (leg.to?.name   || '').replace(/ MRT STATION$/, '')
+    return {
+      mode:   leg.mode,
+      icon:   '🚇',
+      action: `${leg.route || leg.mode} Line: ${fromName} → ${toName}`,
+      detail: `${stops} stop${stops !== 1 ? 's' : ''} · ${dist}`,
+    }
+  })
+}
+
 // ══════════════════════════════════════════════════════════════════
-// ROUTE PANEL — floating card showing active route summary
+// ROUTE PANEL — floating card showing active route summary + steps
 // ══════════════════════════════════════════════════════════════════
 const RoutePanel = memo(function RoutePanel({ routeInfo, onClear }) {
-  if (!routeInfo) return null
+  const [showSteps, setShowSteps] = useState(false)
 
-  const { type, destinationName, summary, itinerary } = routeInfo
-  const dist = summary?.distance || 0
+  const { type, destinationName, summary, itinerary, instructions } = routeInfo || {}
+
+  const dist    = summary?.distance || 0
   const distStr = dist >= 1000
     ? `${(dist / 1000).toFixed(1)} km`
     : dist > 0 ? `${Math.round(dist)} m` : ''
-  const durStr = summary?.duration > 0 ? `~${summary.duration} min` : ''
+  const durStr  = summary?.duration > 0 ? `~${summary.duration} min` : ''
+
+  const ptSteps   = useMemo(() => type === 'pt' ? buildPTSteps(itinerary?.legs) : [], [type, itinerary])
+  const walkSteps = type !== 'pt' && instructions?.length > 0 ? instructions : []
+  const hasSteps  = ptSteps.length > 0 || walkSteps.length > 0
+
+  if (!routeInfo) return null
 
   return (
     <div className="route-panel" role="region" aria-label="Active route">
@@ -113,7 +160,7 @@ const RoutePanel = memo(function RoutePanel({ routeInfo, onClear }) {
         </button>
       </div>
 
-      {/* PT legs summary */}
+      {/* PT legs quick-glance badges */}
       {type === 'pt' && itinerary?.legs?.length > 0 && (
         <div className="route-panel-legs">
           {itinerary.legs.map((leg, i) => (
@@ -125,6 +172,45 @@ const RoutePanel = memo(function RoutePanel({ routeInfo, onClear }) {
                   : `🚇 ${leg.route || 'MRT'}`}
             </span>
           ))}
+        </div>
+      )}
+
+      {/* Step-by-step toggle */}
+      {hasSteps && (
+        <button
+          className="route-steps-toggle"
+          onClick={() => setShowSteps(v => !v)}
+          aria-expanded={showSteps}
+        >
+          {showSteps ? 'Hide directions ▲' : 'Show directions ▼'}
+        </button>
+      )}
+
+      {/* Step-by-step list */}
+      {showSteps && (
+        <div className="route-steps">
+          {type === 'pt'
+            ? ptSteps.map((step, i) => (
+                <div key={i} className={`route-step route-step-${step.mode?.toLowerCase()}`}>
+                  <span className="route-step-icon">{step.icon}</span>
+                  <div className="route-step-body">
+                    <span className="route-step-action">{step.action}</span>
+                    {step.detail && <span className="route-step-detail">{step.detail}</span>}
+                  </div>
+                </div>
+              ))
+            : walkSteps.map((instr, i) => (
+                <div key={i} className="route-step route-step-walk">
+                  <span className="route-step-num">{i + 1}</span>
+                  <div className="route-step-body">
+                    <span className="route-step-action">{instr[9] || instr[0]}</span>
+                    {instr[5] && instr[5] !== '0m' && (
+                      <span className="route-step-detail">{instr[5]}</span>
+                    )}
+                  </div>
+                </div>
+              ))
+          }
         </div>
       )}
     </div>
@@ -267,16 +353,18 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
       const routeInfo = { type: mode, destinationName: destination.name, destination }
 
       if (mode === 'pt') {
-        const itin       = routeData.plan?.itineraries?.[0]
+        const itin = routeData.plan?.itineraries?.[0]
+        if (!itin?.legs?.length) throw new Error('No PT route found. Try a different destination or mode.')
         routeInfo.itinerary = itin
-        const totalDist  = itin?.legs?.reduce((s, l) => s + (l.distance || 0), 0) || 0
-        routeInfo.summary   = {
-          duration: Math.round((itin?.duration || 0) / 60),
+        const totalDist = itin.legs.reduce((s, l) => s + (l.distance || 0), 0)
+        routeInfo.summary = {
+          duration: Math.round((itin.duration || 0) / 60),
           distance: totalDist,
         }
       } else {
-        routeInfo.geometry    = routeData.route_geometry
-        routeInfo.summary     = {
+        if (!routeData.route_geometry) throw new Error('No route geometry returned. Check that start and end are in Singapore.')
+        routeInfo.geometry     = routeData.route_geometry
+        routeInfo.summary      = {
           duration: Math.round((routeData.route_summary?.total_time || 0) / 60),
           distance: routeData.route_summary?.total_distance || 0,
         }
@@ -414,7 +502,7 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady }) {
         <div className="chat-header">
           <div className="chat-header-dot" aria-hidden="true" />
           <span className="chat-header-title">JOM AI</span>
-          <span className="chat-header-sub">Powered by Llama 4 · Tampines</span>
+          <span className="chat-header-sub">Powered by DeepSeek · Tampines</span>
         </div>
 
         <div className="chat-body" ref={bodyRef}>
@@ -480,10 +568,13 @@ export default function MapView() {
   const [routeInfo,     setRouteInfo]     = useState(null)
   const [userLocation,  setUserLocation]  = useState(null)
 
-  // Stable callbacks — won't change reference across renders
+  // Clear first so FacilityMap always sees a fresh object even for the same destination
   const onRouteReady = useCallback((route, userLoc) => {
-    setRouteInfo(route)
-    setUserLocation(userLoc)
+    setRouteInfo(null)
+    setTimeout(() => {
+      setRouteInfo(route)
+      setUserLocation(userLoc)
+    }, 0)
   }, [])
 
   const onClearRoute = useCallback(() => {

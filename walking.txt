@@ -1,0 +1,56 @@
+import requests
+    
+url = "https://www.onemap.gov.sg/api/public/routingsvc/route?start=1.319728%2C103.8421&end=1.319728905%2C103.8421581&routeType=walk"
+    
+headers = {"Authorization": "**********************"}
+    
+response = requests.request("GET", url, headers=headers)
+    
+print(response.text)
+
+
+
+===========================================================
+
+
+
+{
+  "status_message": "Found route between points",
+  "route_geometry": "{u`GktxxR?G",
+  "status": 0,
+  "route_instructions": [
+    [
+      "Left",
+      "",
+      5,
+      "1.319498,103.842142",
+      3,
+      "5m",
+      "East",
+      "North",
+      "walking",
+      "Head East"
+    ],
+    [
+      "Left",
+      "",
+      0,
+      "1.319502,103.842179",
+      0,
+      "0m",
+      "North",
+      "East",
+      "walking",
+      "You Have Arrived At Your Destination, On The Left"
+    ]
+  ],
+  "route_name": [
+    ""
+  ],
+  "route_summary": {
+    "start_point": "",
+    "end_point": "",
+    "total_time": 3,
+    "total_distance": 5
+  }
+}
