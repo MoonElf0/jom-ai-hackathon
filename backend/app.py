@@ -47,6 +47,7 @@ def ai_chat():
     """
     body     = request.get_json(silent=True) or {}
     messages = body.get("messages", [])
+    location = body.get("location")  # {"lat": float, "lng": float} or None
 
     if not messages:
         return jsonify({"error": "No messages provided."}), 400
@@ -57,7 +58,7 @@ def ai_chat():
 
     try:
         from ai_service import chat
-        result = chat(messages)
+        result = chat(messages, location=location)
         # result is {"reply": str, "action": dict | None}
         return jsonify(result)
     except Exception as e:
