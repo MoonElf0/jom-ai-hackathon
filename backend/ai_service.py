@@ -362,8 +362,14 @@ def chat(messages: list[dict], location: dict | None = None, preferences: dict |
         name  = preferences.get("display_name")
         types = preferences.get("favorite_types") or []
         trans = preferences.get("preferred_transport")
+        home  = preferences.get("home_address")
+        bio   = preferences.get("bio")
         if name:
             prompt += f"\n\nUser's name: {name}. Address them occasionally."
+        if home:
+            prompt += f"\n\nUser lives at: {home}. Prioritise facilities close to this location."
+        if bio:
+            prompt += f"\n\nAbout this user: {bio}. Use this to personalise your replies."
         if types:
             prompt += f"\n\nFavourite activities: {', '.join(t.replace('_', ' ') for t in types)}. Prioritise these."
         if trans:

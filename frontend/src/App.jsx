@@ -1,5 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './utils/useAuth'
+
+// Apply saved theme before first render to avoid flash
+const savedTheme = localStorage.getItem('jom-theme') || 'light'
+document.documentElement.dataset.theme = savedTheme
 import MapView          from './pages/MapView'
 import AuthPage         from './pages/AuthPage'
 import ProfilePage      from './pages/ProfilePage'

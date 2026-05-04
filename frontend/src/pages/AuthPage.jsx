@@ -44,6 +44,10 @@ export default function AuthPage() {
             display_name:        displayName.trim() || null,
             preferred_transport: 'pt',
             favorite_types:      [],
+            home_address:        null,
+            bio:                 null,
+            avatar_url:          null,
+            theme:               'light',
           })
         }
 

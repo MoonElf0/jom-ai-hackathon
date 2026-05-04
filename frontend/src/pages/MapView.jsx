@@ -745,6 +745,8 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady, defaultNavMode = 'pt',
             display_name:        userProfile.display_name,
             favorite_types:      userProfile.favorite_types,
             preferred_transport: userProfile.preferred_transport,
+            home_address:        userProfile.home_address,
+            bio:                 userProfile.bio,
           } : null,
         }),
       })

@@ -48,7 +48,7 @@ def ai_chat():
     body        = request.get_json(silent=True) or {}
     messages    = body.get("messages", [])
     location    = body.get("location")     # {"lat": float, "lng": float} or None
-    preferences = body.get("preferences")  # {"display_name", "favorite_types", "preferred_transport"} or None
+    preferences = body.get("preferences")  # {"display_name", "favorite_types", "preferred_transport", "home_address", "bio"} or None
 
     if not messages:
         return jsonify({"error": "No messages provided."}), 400

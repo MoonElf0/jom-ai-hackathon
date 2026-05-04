@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../utils/useAuth'
@@ -28,16 +28,28 @@ const FACILITY_TYPE_OPTIONS = [
 ]
 
 export default function ProfilePage() {
-  const navigate = useNavigate()
-  const { user } = useAuth()
+  const navigate    = useNavigate()
+  const { user }    = useAuth()
+  const fileInputRef = useRef(null)
 
-  const [displayName,   setDisplayName]   = useState('')
-  const [prefTransport, setPrefTransport] = useState('pt')
-  const [favTypes,      setFavTypes]      = useState([])
-  const [savedFacs,     setSavedFacs]     = useState([])
-  const [saving,        setSaving]        = useState(false)
-  const [saveMsg,       setSaveMsg]       = useState(null)
-  const [loading,       setLoading]       = useState(true)
+  const [displayName,    setDisplayName]    = useState('')
+  const [homeAddress,    setHomeAddress]    = useState('')
+  const [bio,            setBio]            = useState('')
+  const [avatarUrl,      setAvatarUrl]      = useState(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [avatarError,    setAvatarError]    = useState(null)
+  const [prefTransport,  setPrefTransport]  = useState('pt')
+  const [favTypes,       setFavTypes]       = useState([])
+  const [theme,          setTheme]          = useState(() => localStorage.getItem('jom-theme') || 'light')
+  const [savedFacs,      setSavedFacs]      = useState([])
+  const [saving,         setSaving]         = useState(false)
+  const [saveMsg,        setSaveMsg]        = useState(null)
+  const [loading,        setLoading]        = useState(true)
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('jom-theme', theme)
+  }, [theme])
 
   useEffect(() => {
     if (!user) return
@@ -55,12 +67,63 @@ export default function ProfilePage() {
         setDisplayName(profRes.data.display_name || '')
         setPrefTransport(profRes.data.preferred_transport || 'pt')
         setFavTypes(profRes.data.favorite_types || [])
+        setHomeAddress(profRes.data.home_address || '')
+        setBio(profRes.data.bio || '')
+        setAvatarUrl(profRes.data.avatar_url || null)
+        if (profRes.data.theme) setTheme(profRes.data.theme)
       }
       if (savedRes.data) setSavedFacs(savedRes.data.filter(r => r.facilities))
       setLoading(false)
     }
     load()
   }, [user])
+
+  // ── Avatar upload ──────────────────────────────────────────────
+  async function handleAvatarChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''   // reset so same file can be re-selected
+
+    if (!file.type.startsWith('image/')) {
+      setAvatarError('Please select an image file (JPG, PNG, etc.).')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError('Image must be under 5 MB.')
+      return
+    }
+
+    setAvatarUploading(true)
+    setAvatarError(null)
+
+    try {
+      const ext  = file.name.split('.').pop().toLowerCase() || 'jpg'
+      const path = `${user.id}/avatar.${ext}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(path, file, { upsert: true, contentType: file.type })
+
+      if (uploadError) throw uploadError
+
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
+      // Append timestamp so the browser doesn't serve the old cached version
+      const freshUrl = `${urlData.publicUrl}?t=${Date.now()}`
+
+      setAvatarUrl(freshUrl)
+
+      // Immediately persist so it's available without clicking Save
+      await supabase.from('user_profiles').upsert({
+        id:         user.id,
+        avatar_url: freshUrl,
+        updated_at: new Date().toISOString(),
+      })
+    } catch (err) {
+      setAvatarError(err.message || 'Upload failed. Check your connection.')
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
 
   async function savePreferences() {
     if (!user) return
@@ -70,11 +133,15 @@ export default function ProfilePage() {
       display_name:        displayName.trim() || null,
       preferred_transport: prefTransport,
       favorite_types:      favTypes,
+      home_address:        homeAddress.trim() || null,
+      bio:                 bio.trim() || null,
+      avatar_url:          avatarUrl || null,
+      theme,
       updated_at:          new Date().toISOString(),
     })
     setSaving(false)
     setSaveMsg(error ? 'error' : 'ok')
-    setTimeout(() => setSaveMsg(null), 2000)
+    setTimeout(() => setSaveMsg(null), 2500)
   }
 
   async function unsaveFacility(savedId) {
@@ -118,23 +185,61 @@ export default function ProfilePage() {
           </svg>
         </button>
         <h1 className="profile-header-title">Profile Settings</h1>
-        <div style={{ width: 40 }} /> {/* Spacer to center title */}
+        <div style={{ width: 40 }} />
       </div>
 
       <div className="profile-scroll">
         {/* ── Identity ── */}
         <div className="profile-identity">
-          <div className="profile-avatar">{initials()}</div>
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleAvatarChange}
+          />
+
+          {/* Avatar — tap to upload */}
+          <button
+            className="profile-avatar-wrap"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={avatarUploading}
+            aria-label="Change profile photo"
+          >
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt="Profile"
+                className="profile-avatar profile-avatar-img"
+              />
+            ) : (
+              <div className="profile-avatar profile-avatar-initials">
+                {initials()}
+              </div>
+            )}
+            <div className="profile-avatar-edit-badge">
+              {avatarUploading ? <div className="profile-avatar-spinner" /> : '📷'}
+            </div>
+          </button>
+
           <div className="profile-identity-info">
             <p className="profile-display-name">{displayName || 'Tampines Resident'}</p>
             <p className="profile-email">{user?.email}</p>
+            <p className="profile-tap-hint">
+              {avatarUploading ? 'Uploading…' : 'Tap photo to change'}
+            </p>
           </div>
         </div>
+
+        {avatarError && (
+          <p className="profile-avatar-error">{avatarError}</p>
+        )}
 
         {/* ── Personal Info ── */}
         <div className="profile-section">
           <h2 className="profile-section-title">Personal Info</h2>
-          <p className="profile-section-sub">Update your display name.</p>
+          <p className="profile-section-sub">Your display name shown in the app.</p>
           <input
             className="profile-input"
             type="text"
@@ -142,6 +247,59 @@ export default function ProfilePage() {
             value={displayName}
             onChange={e => setDisplayName(e.target.value)}
           />
+        </div>
+
+        {/* ── Home Location ── */}
+        <div className="profile-section">
+          <h2 className="profile-section-title">Home Location</h2>
+          <p className="profile-section-sub">Your block or street — JOM AI will suggest facilities close to you.</p>
+          <div className="profile-input-icon-wrap">
+            <span className="profile-input-icon">📍</span>
+            <input
+              className="profile-input profile-input-with-icon"
+              type="text"
+              placeholder="e.g. Blk 456 Tampines St 44"
+              value={homeAddress}
+              onChange={e => setHomeAddress(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* ── About Me (AI Bio) ── */}
+        <div className="profile-section">
+          <h2 className="profile-section-title">About Me</h2>
+          <p className="profile-section-sub">Tell JOM AI about yourself — this personalises every response.</p>
+          <textarea
+            className="profile-textarea"
+            placeholder="e.g. I jog every morning and prefer sheltered courts. Usually out around 7 AM on weekdays..."
+            value={bio}
+            onChange={e => setBio(e.target.value)}
+            rows={4}
+            maxLength={400}
+          />
+          <p className="profile-bio-count">{bio.length} / 400</p>
+        </div>
+
+        {/* ── Appearance ── */}
+        <div className="profile-section">
+          <h2 className="profile-section-title">Appearance</h2>
+          <p className="profile-section-sub">Choose your preferred colour scheme.</p>
+          <div className="profile-theme-row">
+            <button
+              className={`profile-theme-btn${theme === 'light' ? ' active' : ''}`}
+              onClick={() => setTheme('light')}
+            >
+              <span className="profile-theme-icon">☀️</span>
+              <span>Light</span>
+            </button>
+            <button
+              className={`profile-theme-btn${theme === 'dark' ? ' active' : ''}`}
+              onClick={() => setTheme('dark')}
+            >
+              <span className="profile-theme-icon">🌙</span>
+              <span>Dark</span>
+            </button>
+          </div>
         </div>
 
         {/* ── Transport ── */}
@@ -164,7 +322,7 @@ export default function ProfilePage() {
         {/* ── Activities ── */}
         <div className="profile-section">
           <h2 className="profile-section-title">Favourite Activities</h2>
-          <p className="profile-section-sub">{favTypes.length} types selected.</p>
+          <p className="profile-section-sub">{favTypes.length} selected.</p>
           <div className="profile-fav-grid">
             {FACILITY_TYPE_OPTIONS.map(opt => (
               <button
@@ -209,14 +367,12 @@ export default function ProfilePage() {
         <div style={{ marginTop: 24 }}>
           {saveMsg && (
             <p className={`profile-save-msg ${saveMsg === 'ok' ? 'ok' : 'err'}`}>
-              {saveMsg === 'ok' ? '✓ Settings saved successfully' : 'Failed to save settings'}
+              {saveMsg === 'ok' ? '✓ Settings saved' : 'Failed to save — check your connection'}
             </p>
           )}
-          
           <button className="profile-save-btn" onClick={savePreferences} disabled={saving}>
             {saving ? <span className="profile-save-spinner" /> : 'Save Changes'}
           </button>
-
           <button className="profile-signout" onClick={signOut}>Log out</button>
         </div>
       </div>
