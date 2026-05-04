@@ -23,7 +23,7 @@
 import { memo, useEffect } from 'react'
 import {
   MapContainer, TileLayer, Marker, Popup,
-  Polyline, Circle, CircleMarker, useMap, Polygon,
+  Polyline, Circle, CircleMarker, useMap, useMapEvents, Polygon,
 } from 'react-leaflet'
 import L from 'leaflet'
 import { TAMPINES_BOUNDARY } from '../utils/tampinesBoundary'
@@ -130,6 +130,23 @@ const DEST_ICON = L.divIcon({
   iconAnchor:  [16, 40],
   popupAnchor: [0, -42],
 })
+
+const PENDING_PIN_ICON = L.divIcon({
+  html: `<div class="pending-pin-dot"></div>`,
+  className: '',
+  iconSize: [28, 28],
+  iconAnchor: [14, 14],
+  popupAnchor: [0, -16],
+})
+
+function getUserIcon(type) {
+  const colour = TYPE_COLOURS[type] || '#f59e0b'
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="12" fill="${colour}" stroke="white" stroke-width="2.5" opacity="0.95"/>
+    <text x="16" y="21" text-anchor="middle" font-size="13" fill="white">★</text>
+  </svg>`
+  return L.divIcon({ html: svg, className: '', iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -18] })
+}
 
 // ─── Transit label pill icon ─────────────────────────────────────
 // Shows route codes like "NE", "963", "NE>CC", "963>234"
@@ -286,7 +303,23 @@ function formatType(type) {
 }
 
 // ─── Component ───────────────────────────────────────────────────
-export default memo(function FacilityMap({ facilities = [], userLocation = null, routeInfo = null, onNavigateTo = null, user = null, savedFacilityIds = null, onSaveToggle = null }) {
+export default memo(function FacilityMap({ facilities = [], userLocation = null, routeInfo = null, onNavigateTo = null, user = null, savedFacilityIds = null, onSaveToggle = null, pinMode = false, pendingPin = null, onMapClick = null }) {
+  function MapClickHandler({ pinMode, onMapClick }) {
+    const map = useMap()
+    useMapEvents({
+      click(e) {
+        if (pinMode && onMapClick) {
+          onMapClick(e.latlng.lat, e.latlng.lng)
+        }
+      }
+    })
+    useEffect(() => {
+      const container = map.getContainer()
+      container.style.cursor = pinMode ? 'crosshair' : ''
+      return () => { container.style.cursor = '' }
+    }, [pinMode, map])
+    return null
+  }
   const { stepMarkers, stopMarkers } = routeInfo?.type === 'pt'
     ? buildPTMarkers(routeInfo)
     : { stepMarkers: [], stopMarkers: [] }
@@ -326,12 +359,15 @@ export default memo(function FacilityMap({ facilities = [], userLocation = null,
 
       {/* Facility markers */}
       {facilities.map((f) => (
-        <Marker key={f.id} position={[f.lat, f.lng]} icon={getIcon(f.type)}>
+        <Marker key={f.id} position={[f.lat, f.lng]} icon={f.is_verified === false ? getUserIcon(f.type) : getIcon(f.type)}>
           <Popup className="facility-popup">
             <p className="popup-name">{f.name}</p>
             <p className="popup-type" style={{ color: TYPE_COLOURS[f.type] || '#6366f1' }}>
               {formatType(f.type)}
             </p>
+            {f.is_verified === false && (
+              <p style={{ fontSize: '10px', color: '#f59e0b', fontWeight: 700, marginBottom: 4 }}>★ Community spot</p>
+            )}
             {f.address && <p className="popup-address">{f.address}</p>}
             {(f.is_sheltered || f.is_indoor) && (
               <div className="popup-tags">
@@ -445,6 +481,14 @@ export default memo(function FacilityMap({ facilities = [], userLocation = null,
 
       {/* Auto-fit map to show full route */}
       {routeInfo && <FitBoundsEffect routeInfo={routeInfo} userLocation={userLocation} />}
+
+      <MapClickHandler pinMode={pinMode} onMapClick={onMapClick} />
+
+      {pendingPin && (
+        <Marker position={[pendingPin.lat, pendingPin.lng]} icon={PENDING_PIN_ICON}>
+          <Popup><span style={{ fontSize: '13px', fontWeight: 700 }}>📍 New spot here</span></Popup>
+        </Marker>
+      )}
     </MapContainer>
   )
 })

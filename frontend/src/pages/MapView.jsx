@@ -22,6 +22,25 @@ const TRANSPORT_MODES = [
   { label: '🚗 Drive',      value: 'drive' },
 ]
 
+const SPOT_TYPE_OPTIONS = [
+  { value: 'basketball_court',    label: '🏀 Basketball Court'    },
+  { value: 'badminton_court',     label: '🏸 Badminton Court'     },
+  { value: 'tennis_court',        label: '🎾 Tennis Court'        },
+  { value: 'volleyball_court',    label: '🏐 Volleyball Court'    },
+  { value: 'football_field',      label: '⚽ Football Field'      },
+  { value: 'futsal_court',        label: '🥅 Futsal Court'        },
+  { value: 'gym',                 label: '💪 Gym'                 },
+  { value: 'fitness_corner',      label: '🏋️ Fitness Corner'      },
+  { value: 'swimming_pool',       label: '🏊 Swimming Pool'       },
+  { value: 'playground',          label: '🛝 Playground'          },
+  { value: 'jogging_track',       label: '🏃 Jogging Track'       },
+  { value: 'cycling_path',        label: '🚴 Cycling Path'        },
+  { value: 'multi_purpose_court', label: '🏟️ Multi-Purpose Court' },
+  { value: 'skate_park',          label: '🛹 Skate Park'          },
+  { value: 'sheltered_pavilion',  label: '⛺ Sheltered Pavilion'  },
+  { value: 'park',                label: '🌳 Park'                },
+]
+
 // Fallback origin for users outside Tampines
 const TAMPINES_MRT_LAT = 1.35468
 const TAMPINES_MRT_LNG = 103.94565
@@ -289,7 +308,7 @@ const RoutePanel = memo(function RoutePanel({ routeInfo, onClear }) {
 // ══════════════════════════════════════════════════════════════════
 // MAP AREA
 // ══════════════════════════════════════════════════════════════════
-const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, userLocation, onClearRoute, onNavigateTo, user, savedFacilityIds, onSaveToggle }) {
+const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, userLocation, onClearRoute, onNavigateTo, user, savedFacilityIds, onSaveToggle, pinMode, pendingPin, onTogglePinMode, onMapClick }) {
   return (
     <div className="map-area">
       {loading && (
@@ -306,6 +325,23 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
           </div>
         </div>
       )}
+      {/* Pin mode banner */}
+      {pinMode && (
+        <div className="pin-mode-banner">
+          📍 Tap anywhere on the map to place your spot
+        </div>
+      )}
+
+      {/* Add Spot FAB */}
+      <button
+        className={`map-fab${pinMode ? ' active' : ''}`}
+        onClick={onTogglePinMode}
+        aria-label={pinMode ? 'Cancel adding spot' : 'Add new spot'}
+        title={pinMode ? 'Cancel' : 'Add a new spot'}
+      >
+        {pinMode ? '✕' : '+'}
+      </button>
+
       <Suspense fallback={null}>
         <FacilityMap
           facilities={facilities}
@@ -315,6 +351,9 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
           user={user}
           savedFacilityIds={savedFacilityIds}
           onSaveToggle={onSaveToggle}
+          pinMode={pinMode}
+          pendingPin={pendingPin}
+          onMapClick={onMapClick}
         />
       </Suspense>
       <RoutePanel routeInfo={routeInfo} onClear={onClearRoute} />
@@ -904,6 +943,12 @@ export default function MapView() {
   const [userLocation,     setUserLocation]     = useState(null)
   const [userProfile,      setUserProfile]      = useState(null)
   const [savedFacilityIds, setSavedFacilityIds] = useState(new Set())
+  const [pinMode,      setPinMode]      = useState(false)
+  const [pendingPin,   setPendingPin]   = useState(null)
+  const [showAddForm,  setShowAddForm]  = useState(false)
+  const [addForm,      setAddForm]      = useState({ name: '', type: 'basketball_court', address: '', isSheltered: false, isIndoor: false })
+  const [addingSpot,   setAddingSpot]   = useState(false)
+  const [addSpotError, setAddSpotError] = useState(null)
 
   // Filter to only facilities actually inside the Tampines boundary polygon
   const tampinesFacilities = useMemo(
@@ -948,6 +993,54 @@ export default function MapView() {
       setSavedFacilityIds(prev => new Set([...prev, facility.id]))
     }
   }, [user, savedFacilityIds])
+
+  const handleTogglePinMode = useCallback(() => {
+    setPinMode(v => {
+      if (v) { setPendingPin(null); setShowAddForm(false) }
+      return !v
+    })
+  }, [])
+
+  const handleMapClick = useCallback((lat, lng) => {
+    setPendingPin({ lat, lng })
+    setShowAddForm(true)
+    setPinMode(false)
+  }, [])
+
+  const handleAddSpotSubmit = useCallback(async () => {
+    if (!addForm.name.trim() || !pendingPin || !user) return
+    setAddingSpot(true)
+    setAddSpotError(null)
+    try {
+      const { data, error } = await supabase.from('facilities').insert({
+        name:         addForm.name.trim(),
+        type:         addForm.type,
+        address:      addForm.address.trim() || null,
+        lat:          pendingPin.lat,
+        lng:          pendingPin.lng,
+        is_sheltered: addForm.isSheltered,
+        is_indoor:    addForm.isIndoor,
+        is_verified:  false,
+      }).select().single()
+      if (error) throw error
+      // Add to local list immediately (no refetch needed)
+      setFacilities(prev => [...prev, data])
+      setPendingPin(null)
+      setShowAddForm(false)
+      setAddForm({ name: '', type: 'basketball_court', address: '', isSheltered: false, isIndoor: false })
+    } catch (err) {
+      setAddSpotError(err.message || 'Failed to add spot')
+    } finally {
+      setAddingSpot(false)
+    }
+  }, [addForm, pendingPin, user])
+
+  const handleAddSpotCancel = useCallback(() => {
+    setPendingPin(null)
+    setShowAddForm(false)
+    setPinMode(false)
+    setAddSpotError(null)
+  }, [])
 
   // Called when user taps "Route here" on a map facility popup
   const routeFromUserTo = useCallback(async (facility) => {
@@ -1065,12 +1158,98 @@ export default function MapView() {
         user={user}
         savedFacilityIds={savedFacilityIds}
         onSaveToggle={onSaveToggle}
+        pinMode={pinMode}
+        pendingPin={pendingPin}
+        onTogglePinMode={handleTogglePinMode}
+        onMapClick={handleMapClick}
       />
       <ChatSheet
         onRouteReady={onRouteReady}
         defaultNavMode={userProfile?.preferred_transport || 'pt'}
         userProfile={userProfile}
       />
+      {showAddForm && (
+        <div className="add-spot-overlay">
+          <div className="add-spot-sheet">
+            <div className="add-spot-header">
+              <h2 className="add-spot-title">Add New Spot</h2>
+              <button className="add-spot-close" onClick={handleAddSpotCancel}>✕</button>
+            </div>
+
+            <div className="add-spot-body">
+              <p className="add-spot-coords">
+                📍 {pendingPin?.lat.toFixed(5)}, {pendingPin?.lng.toFixed(5)}
+              </p>
+
+              {addSpotError && (
+                <p className="add-spot-error">{addSpotError}</p>
+              )}
+
+              <div className="add-spot-field">
+                <label className="add-spot-label">Spot Name *</label>
+                <input
+                  className="add-spot-input"
+                  type="text"
+                  placeholder="e.g. Block 456 Basketball Court"
+                  value={addForm.name}
+                  onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
+                  autoFocus
+                />
+              </div>
+
+              <div className="add-spot-field">
+                <label className="add-spot-label">Type *</label>
+                <select
+                  className="add-spot-input add-spot-select"
+                  value={addForm.type}
+                  onChange={e => setAddForm(f => ({ ...f, type: e.target.value }))}
+                >
+                  {SPOT_TYPE_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="add-spot-field">
+                <label className="add-spot-label">Address (optional)</label>
+                <input
+                  className="add-spot-input"
+                  type="text"
+                  placeholder="e.g. Blk 456 Tampines St 44"
+                  value={addForm.address}
+                  onChange={e => setAddForm(f => ({ ...f, address: e.target.value }))}
+                />
+              </div>
+
+              <div className="add-spot-toggles">
+                <button
+                  className={`add-spot-toggle${addForm.isSheltered ? ' active' : ''}`}
+                  onClick={() => setAddForm(f => ({ ...f, isSheltered: !f.isSheltered }))}
+                >
+                  ☂️ Sheltered
+                </button>
+                <button
+                  className={`add-spot-toggle${addForm.isIndoor ? ' active' : ''}`}
+                  onClick={() => setAddForm(f => ({ ...f, isIndoor: !f.isIndoor }))}
+                >
+                  🏠 Indoor
+                </button>
+              </div>
+            </div>
+
+            <div className="add-spot-actions">
+              <button className="add-spot-cancel" onClick={handleAddSpotCancel}>Cancel</button>
+              <button
+                className="add-spot-submit"
+                onClick={handleAddSpotSubmit}
+                disabled={!addForm.name.trim() || addingSpot}
+              >
+                {addingSpot ? <span className="add-spot-spinner" /> : '📍 Add Spot'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

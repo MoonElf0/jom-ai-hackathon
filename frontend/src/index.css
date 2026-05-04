@@ -1685,3 +1685,269 @@ input {
   color: var(--accent);
 }
 .profile-theme-icon { font-size: 18px; line-height: 1; }
+
+/* Leaflet popup dark mode */
+[data-theme="dark"] .leaflet-popup-content-wrapper {
+  background: #1e293b;
+  color: #f1f5f9;
+  border: 1px solid #334155;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+[data-theme="dark"] .leaflet-popup-tip {
+  background: #1e293b;
+}
+[data-theme="dark"] .leaflet-popup-close-button {
+  color: #94a3b8 !important;
+}
+[data-theme="dark"] .leaflet-popup-close-button:hover {
+  color: #f1f5f9 !important;
+}
+[data-theme="dark"] .popup-name    { color: #f1f5f9; }
+[data-theme="dark"] .popup-address { color: #94a3b8; }
+
+/* ══════════════════════════════════════════════════════════════
+   PENDING PIN ANIMATION
+══════════════════════════════════════════════════════════════ */
+.pending-pin-dot {
+  width: 28px;
+  height: 28px;
+  background: #16a34a;
+  border: 3px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 0 0 rgba(22,163,74,0.5);
+  animation: pin-pulse 1.5s ease-out infinite;
+}
+@keyframes pin-pulse {
+  0%   { box-shadow: 0 0 0 0   rgba(22,163,74,0.5); }
+  70%  { box-shadow: 0 0 0 12px rgba(22,163,74,0);   }
+  100% { box-shadow: 0 0 0 0   rgba(22,163,74,0);    }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ADD SPOT FAB & PIN MODE BANNER
+══════════════════════════════════════════════════════════════ */
+.map-fab {
+  position: absolute;
+  bottom: 80px;
+  right: 16px;
+  z-index: 1300;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 28px;
+  font-weight: 300;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-accent);
+  border: none;
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-spring), box-shadow var(--transition-fast);
+  will-change: transform;
+}
+.map-fab:hover  { transform: scale(1.08); box-shadow: 0 8px 24px var(--accent-glow); }
+.map-fab:active { transform: scale(0.92); }
+.map-fab.active {
+  background: #64748b;
+  font-size: 20px;
+  font-weight: 700;
+  box-shadow: var(--shadow-md);
+}
+
+.pin-mode-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1300;
+  background: #1e293b;
+  color: #f1f5f9;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: 999px;
+  box-shadow: var(--shadow-md);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: banner-drop 250ms cubic-bezier(0.16,1,0.3,1) both;
+}
+@keyframes banner-drop {
+  from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0);    }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ADD SPOT MODAL / SHEET
+══════════════════════════════════════════════════════════════ */
+.add-spot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(15,23,42,0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 0 env(safe-area-inset-bottom);
+  animation: fade-in 200ms ease both;
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.add-spot-sheet {
+  width: 100%;
+  max-width: 480px;
+  background: var(--surface);
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  animation: sheet-up 320ms cubic-bezier(0.16,1,0.3,1) both;
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+@keyframes sheet-up {
+  from { transform: translateY(40px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.add-spot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 20px 4px;
+  flex-shrink: 0;
+}
+.add-spot-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+.add-spot-close {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast);
+}
+.add-spot-close:hover { background: var(--border); }
+
+.add-spot-body { padding: 12px 20px 4px; display: flex; flex-direction: column; gap: 14px; }
+
+.add-spot-coords {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-family: 'Courier New', monospace;
+}
+
+.add-spot-error {
+  font-size: 13px;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 500;
+}
+
+.add-spot-field { display: flex; flex-direction: column; gap: 6px; }
+.add-spot-label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+
+.add-spot-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+.add-spot-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.add-spot-select { cursor: pointer; appearance: auto; }
+
+.add-spot-toggles { display: flex; gap: 10px; }
+.add-spot-toggle {
+  flex: 1;
+  padding: 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.add-spot-toggle.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.add-spot-actions {
+  display: flex;
+  gap: 10px;
+  padding: 16px 20px 24px;
+  flex-shrink: 0;
+}
+.add-spot-cancel {
+  flex: 1;
+  padding: 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.add-spot-cancel:hover { background: var(--border); }
+
+.add-spot-submit {
+  flex: 2;
+  padding: 14px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px;
+  transition: opacity var(--transition-fast);
+}
+.add-spot-submit:hover    { opacity: 0.9; }
+.add-spot-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.add-spot-spinner {
+  width: 20px; height: 20px;
+  border: 2.5px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* Dark mode adjustments for add-spot modal */
+[data-theme="dark"] .add-spot-select { background: var(--surface-2); color: var(--text); }
+[data-theme="dark"] .add-spot-input:focus { background: var(--surface); }
