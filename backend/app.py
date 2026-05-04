@@ -70,8 +70,8 @@ def ai_chat():
         if "401" in err_str and ("api_key" in err_lower or "invalid" in err_lower):
             return jsonify({
                 "error": (
-                    "GROQ_API_KEY is invalid or expired. "
-                    "Please update GROQ_API_KEY in backend/.env and restart the server."
+                    "DEEPSEEK_API_KEY is invalid or expired. "
+                    "Please update DEEPSEEK_API_KEY in backend/.env and restart the server."
                 )
             }), 503
         return jsonify({"error": err_str}), 500
