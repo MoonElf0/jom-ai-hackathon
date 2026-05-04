@@ -1951,3 +1951,211 @@ input {
 /* Dark mode adjustments for add-spot modal */
 [data-theme="dark"] .add-spot-select { background: var(--surface-2); color: var(--text); }
 [data-theme="dark"] .add-spot-input:focus { background: var(--surface); }
+/* -- Side Pane ---------------------------------------------- */
+.side-pane {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 400px;
+  height: 100%;
+  background: var(--surface);
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 2px 0 12px rgba(0,0,0,0.5);
+  overflow-y: auto;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@media (max-width: 600px) {
+  .side-pane {
+    width: 100%;
+    top: auto;
+    bottom: 0;
+    height: 80vh;
+    border-radius: 16px 16px 0 0;
+    animation: slideUp 0.3s ease-out;
+  }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.side-pane-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.5);
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  backdrop-filter: blur(4px);
+}
+
+.side-pane-image {
+  width: 100%;
+  height: 240px;
+  background: #1e2130;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.image-placeholder-text {
+  color: #64748b;
+  font-size: 14px;
+}
+
+.side-pane-content {
+  padding: 20px;
+}
+
+.side-pane-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin-bottom: 4px;
+}
+
+.side-pane-rating {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+.rating-score { font-weight: 600; color: #e2e8f0; }
+.rating-stars { color: #fbbf24; }
+.rating-count { color: #64748b; }
+.rating-price { color: #64748b; }
+
+.side-pane-type {
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.side-pane-tabs {
+  display: flex;
+  border-bottom: 1px solid #2a2d3a;
+  margin-bottom: 16px;
+}
+.side-pane-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  padding: 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.side-pane-tab.active {
+  color: #6366f1;
+  border-bottom-color: #6366f1;
+}
+
+.side-pane-actions {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 24px;
+}
+.side-pane-action-btn {
+  background: none;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: #6366f1;
+  font-size: 12px;
+  font-weight: 500;
+}
+.side-pane-action-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #1e2130;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: white;
+}
+
+.side-pane-info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid #2a2d3a;
+}
+.side-pane-info-icon { font-size: 18px; }
+.side-pane-info-text { font-size: 14px; color: #e2e8f0; line-height: 1.4; }
+
+.side-pane-review-input-container {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.side-pane-review-input {
+  flex: 1;
+  background: #0f1117;
+  border: 1px solid #2a2d3a;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #e2e8f0;
+  font-size: 13px;
+}
+.side-pane-post-review-btn {
+  background: #6366f1;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.side-pane-review-card {
+  padding: 16px 0;
+  border-bottom: 1px solid #2a2d3a;
+}
+.side-pane-review-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.side-pane-reviewer-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #fb923c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 12px;
+  color: white;
+}
+.side-pane-reviewer-name { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+.side-pane-reviewer-stars { font-size: 12px; color: #fbbf24; }
+.side-pane-review-time { color: #64748b; margin-left: 8px; }
+.side-pane-review-body { font-size: 13px; color: #cbd5e1; line-height: 1.5; }

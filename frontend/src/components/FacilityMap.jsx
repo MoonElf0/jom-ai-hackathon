@@ -20,7 +20,7 @@
 //                  duration },
 //     summary: {duration, distance} }
 
-import { memo, useEffect } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import {
   MapContainer, TileLayer, Marker, Popup,
   Polyline, Circle, CircleMarker, useMap, useMapEvents, Polygon,
@@ -302,8 +302,84 @@ function formatType(type) {
     .join(' ')
 }
 
+// ── Helper: Fly to a selected facility ──────────────────────
+function FlyToSelected({ selectedFacility, markerRefs }) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (!selectedFacility) return
+
+    map.flyTo([selectedFacility.lat, selectedFacility.lng], 17, { duration: 1.2 })
+
+    setTimeout(() => {
+      const markerRef = markerRefs.current?.[selectedFacility.id]
+      if (markerRef) markerRef.openPopup()
+    }, 1300)
+  }, [selectedFacility, map, markerRefs])
+
+  return null
+}
+
+function FacilityPopupContent({ f, onNavigateTo, user, savedFacilityIds, onSaveToggle, onShowDetails }) {
+  const isSaved = savedFacilityIds?.has(f.id)
+
+  return (
+    <div className="popup-content" style={{ minWidth: '180px' }}>
+      <p className="popup-name">{f.name}</p>
+      <p className="popup-type" style={{ color: TYPE_COLOURS[f.type] || '#6366f1' }}>
+        {formatType(f.type)}
+      </p>
+      
+      {/* Ratings - mock data */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', margin: '4px 0 8px 0' }}>
+        <span style={{ fontSize: '12px', color: '#fbbf24' }}>★★★★☆</span>
+        <span style={{ fontSize: '11px', color: '#64748b' }}>4.2 (18)</span>
+      </div>
+      
+      {/* Community spot tag */}
+      {f.is_verified === false && (
+        <p style={{ fontSize: '10px', color: '#f59e0b', fontWeight: 700, marginBottom: 4 }}>★ Community spot</p>
+      )}
+
+      {/* Short details */}
+      {f.address && (
+        <p className="popup-address" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {f.address}
+        </p>
+      )}
+
+      {/* Action Buttons */}
+      <div className="popup-actions" style={{ marginTop: '12px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        {onNavigateTo && (
+          <button className="popup-nav-btn" onClick={() => onNavigateTo(f)} style={{ flex: 1, minWidth: '70px', padding: '6px', margin: 0 }}>
+            🚌 Route
+          </button>
+        )}
+        <button 
+          onClick={() => onShowDetails?.(f)} 
+          style={{ background: '#334155', border: 'none', color: '#f8fafc', padding: '6px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', flex: 1, minWidth: '70px', fontWeight: 600, fontFamily: 'inherit' }}
+        >
+          More Details
+        </button>
+        {user && onSaveToggle && (
+          <button
+            className={`popup-save-btn${isSaved ? ' saved' : ''}`}
+            onClick={() => onSaveToggle(f)}
+            title={isSaved ? 'Remove from saved' : 'Save place'}
+            style={{ width: '32px', padding: '6px 0', margin: 0, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            {isSaved ? '❤️' : '🤍'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Component ───────────────────────────────────────────────────
-export default memo(function FacilityMap({ facilities = [], userLocation = null, routeInfo = null, onNavigateTo = null, user = null, savedFacilityIds = null, onSaveToggle = null, pinMode = false, pendingPin = null, onMapClick = null }) {
+export default memo(function FacilityMap({ facilities = [], userLocation = null, routeInfo = null, onNavigateTo = null, user = null, savedFacilityIds = null, onSaveToggle = null, pinMode = false, pendingPin = null, onMapClick = null, selectedFacility = null, onShowDetails = null }) {
+  const markerRefs = useRef({})
+
   function MapClickHandler({ pinMode, onMapClick }) {
     const map = useMap()
     useMapEvents({
@@ -357,40 +433,26 @@ export default memo(function FacilityMap({ facilities = [], userLocation = null,
         interactive={false}
       />
 
+      {/* Fly to selected facility */}
+      <FlyToSelected selectedFacility={selectedFacility} markerRefs={markerRefs} />
+
       {/* Facility markers */}
       {facilities.map((f) => (
-        <Marker key={f.id} position={[f.lat, f.lng]} icon={f.is_verified === false ? getUserIcon(f.type) : getIcon(f.type)}>
+        <Marker 
+          key={f.id} 
+          position={[f.lat, f.lng]} 
+          icon={f.is_verified === false ? getUserIcon(f.type) : getIcon(f.type)}
+          ref={el => { if (el) markerRefs.current[f.id] = el }}
+        >
           <Popup className="facility-popup">
-            <p className="popup-name">{f.name}</p>
-            <p className="popup-type" style={{ color: TYPE_COLOURS[f.type] || '#6366f1' }}>
-              {formatType(f.type)}
-            </p>
-            {f.is_verified === false && (
-              <p style={{ fontSize: '10px', color: '#f59e0b', fontWeight: 700, marginBottom: 4 }}>★ Community spot</p>
-            )}
-            {f.address && <p className="popup-address">{f.address}</p>}
-            {(f.is_sheltered || f.is_indoor) && (
-              <div className="popup-tags">
-                {f.is_sheltered && <span className="popup-tag sheltered">Sheltered</span>}
-                {f.is_indoor    && <span className="popup-tag indoor">Indoor</span>}
-              </div>
-            )}
-            <div className="popup-actions">
-              {onNavigateTo && (
-                <button className="popup-nav-btn" onClick={() => onNavigateTo(f)}>
-                  🚌 Route here
-                </button>
-              )}
-              {user && onSaveToggle && (
-                <button
-                  className={`popup-save-btn${savedFacilityIds?.has(f.id) ? ' saved' : ''}`}
-                  onClick={() => onSaveToggle(f)}
-                  title={savedFacilityIds?.has(f.id) ? 'Remove from saved' : 'Save place'}
-                >
-                  {savedFacilityIds?.has(f.id) ? '❤️ Saved' : '🤍 Save'}
-                </button>
-              )}
-            </div>
+            <FacilityPopupContent 
+              f={f} 
+              onNavigateTo={onNavigateTo} 
+              user={user} 
+              savedFacilityIds={savedFacilityIds} 
+              onSaveToggle={onSaveToggle} 
+              onShowDetails={onShowDetails}
+            />
           </Popup>
         </Marker>
       ))}

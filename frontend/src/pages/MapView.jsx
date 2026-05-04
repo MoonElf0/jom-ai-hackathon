@@ -9,6 +9,8 @@ import { isInTampines } from '../utils/tampinesBoundary'
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 
 const FacilityMap = lazy(() => import('../components/FacilityMap'))
+import SearchBar from '../components/SearchBar'
+import FacilitySidePane from '../components/FacilitySidePane'
 
 // ── Travel mode metadata ──────────────────────────────────────────
 const MODE_ICONS  = { walk: '🚶', drive: '🚗', cycle: '🚲', pt: '🚌' }
@@ -308,9 +310,12 @@ const RoutePanel = memo(function RoutePanel({ routeInfo, onClear }) {
 // ══════════════════════════════════════════════════════════════════
 // MAP AREA
 // ══════════════════════════════════════════════════════════════════
-const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, userLocation, onClearRoute, onNavigateTo, user, savedFacilityIds, onSaveToggle, pinMode, pendingPin, onTogglePinMode, onMapClick }) {
+const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, userLocation, onClearRoute, onNavigateTo, user, savedFacilityIds, onSaveToggle, pinMode, pendingPin, onTogglePinMode, onMapClick, selectedFacility, onSelectFacility, onShowDetails }) {
   return (
     <div className="map-area">
+      <div style={{ position: 'absolute', top: '16px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: 'calc(100% - 32px)', maxWidth: '520px' }}>
+        <SearchBar facilities={facilities} onSelectFacility={onSelectFacility} />
+      </div>
       {loading && (
         <div className="map-loading" aria-live="polite">
           <div className="map-loading-spinner" />
@@ -347,6 +352,7 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
           facilities={facilities}
           routeInfo={routeInfo}
           userLocation={userLocation}
+          selectedFacility={selectedFacility}
           onNavigateTo={onNavigateTo}
           user={user}
           savedFacilityIds={savedFacilityIds}
@@ -354,6 +360,7 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
           pinMode={pinMode}
           pendingPin={pendingPin}
           onMapClick={onMapClick}
+          onShowDetails={onShowDetails}
         />
       </Suspense>
       <RoutePanel routeInfo={routeInfo} onClear={onClearRoute} />
@@ -943,6 +950,8 @@ export default function MapView() {
   const [userLocation,     setUserLocation]     = useState(null)
   const [userProfile,      setUserProfile]      = useState(null)
   const [savedFacilityIds, setSavedFacilityIds] = useState(new Set())
+  const [selectedFacility, setSelectedFacility] = useState(null)
+  const [detailsFacility,  setDetailsFacility]  = useState(null)
   const [pinMode,      setPinMode]      = useState(false)
   const [pendingPin,   setPendingPin]   = useState(null)
   const [showAddForm,  setShowAddForm]  = useState(false)
@@ -1045,13 +1054,20 @@ export default function MapView() {
   // Called when user taps "Route here" on a map facility popup
   const routeFromUserTo = useCallback(async (facility) => {
     try {
-      const position = await new Promise((res, rej) =>
-        navigator.geolocation.getCurrentPosition(res, rej, {
-          enableHighAccuracy: true, timeout: 10000, maximumAge: 30000,
-        })
-      )
-      let userLat = position.coords.latitude
-      let userLng = position.coords.longitude
+      let userLat, userLng
+      try {
+        const position = await new Promise((res, rej) =>
+          navigator.geolocation.getCurrentPosition(res, rej, {
+            enableHighAccuracy: true, timeout: 5000, maximumAge: 60000,
+          })
+        )
+        userLat = position.coords.latitude
+        userLng = position.coords.longitude
+      } catch (err) {
+        console.warn('Geolocation failed, falling back to Tampines MRT:', err)
+        userLat = TAMPINES_MRT_LAT
+        userLng = TAMPINES_MRT_LNG
+      }
       if (!isInTampines(userLat, userLng)) {
         userLat = TAMPINES_MRT_LAT
         userLng = TAMPINES_MRT_LNG
@@ -1112,8 +1128,9 @@ export default function MapView() {
         },
         [userLat, userLng]
       )
-    } catch {
-      // silently ignore — user can always use the chat flow instead
+    } catch (err) {
+      console.error('Routing failed:', err)
+      // silently ignore UI-wise — user can always use the chat flow instead
     }
   }, [onRouteReady])
 
@@ -1145,7 +1162,7 @@ export default function MapView() {
   }
 
   return (
-    <div className="map-page">
+    <div className="map-page" style={{ position: 'relative' }}>
       <Navbar onNavigateProfile={() => navigate('/profile')} onSignOut={handleSignOut} />
       <MapArea
         facilities={tampinesFacilities}
@@ -1162,11 +1179,22 @@ export default function MapView() {
         pendingPin={pendingPin}
         onTogglePinMode={handleTogglePinMode}
         onMapClick={handleMapClick}
+        selectedFacility={selectedFacility}
+        onSelectFacility={setSelectedFacility}
+        onShowDetails={setDetailsFacility}
       />
       <ChatSheet
         onRouteReady={onRouteReady}
         defaultNavMode={userProfile?.preferred_transport || 'pt'}
         userProfile={userProfile}
+      />
+      <FacilitySidePane 
+        facility={detailsFacility} 
+        onClose={() => setDetailsFacility(null)} 
+        onNavigateTo={routeFromUserTo}
+        user={user}
+        isSaved={detailsFacility && savedFacilityIds.has(detailsFacility.id)}
+        onSaveToggle={onSaveToggle}
       />
       {showAddForm && (
         <div className="add-spot-overlay">
