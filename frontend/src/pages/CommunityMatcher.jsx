@@ -277,74 +277,70 @@ export default function CommunityMatcher() {
       {/* Tab content */}
       <div className="cm-content">
         {/* Tab 1: My Squad (Friends + Chat) */}
-        {activeTab === 'squad' && (
-          <div className="cm-squad-panel">
-            <div className="squad-header">
-              <h2>My Squad</h2>
-              <button
-                className={`looking-btn ${userProfile?.looking_for_match ? 'active' : ''}`}
-                onClick={() => toggleLookingForMatch(!userProfile?.looking_for_match)}
-              >
-                {userProfile?.looking_for_match ? '🔴 Looking for Match' : '⚪ Not Looking'}
-              </button>
-            </div>
-
-            <div className="squad-content">
-              {/* Friends list */}
-              <FriendsPanel
-                groupChats={groupChats}
-                activeChat={activeChat}
-                onSelectChat={setActiveChat}
-              />
-
-              {/* Chat panel */}
-              {activeChat && (
-                <GroupChat
-                  chatId={activeChat.id}
-                  chatName={activeChat.name}
-                  memberIds={activeChat.member_ids}
-                  userId={user.id}
-                />
-              )}
-            </div>
+        <div className="cm-squad-panel" style={{ display: activeTab === 'squad' ? 'block' : 'none' }}>
+          <div className="squad-header">
+            <h2>My Squad</h2>
+            <button
+              className={`looking-btn ${userProfile?.looking_for_match ? 'active' : ''}`}
+              onClick={() => toggleLookingForMatch(!userProfile?.looking_for_match)}
+            >
+              {userProfile?.looking_for_match ? '🔴 Looking for Match' : '⚪ Not Looking'}
+            </button>
           </div>
-        )}
+
+          <div className="squad-content">
+            {/* Friends list */}
+            <FriendsPanel
+              groupChats={groupChats}
+              activeChat={activeChat}
+              onSelectChat={setActiveChat}
+            />
+
+            {/* Chat panel */}
+            {activeChat && (
+              <GroupChat
+                chatId={activeChat.id}
+                chatName={activeChat.name}
+                memberIds={activeChat.member_ids}
+                userId={user.id}
+              />
+            )}
+          </div>
+        </div>
 
         {/* Tab 2: Find a Game (Swipe Cards) */}
-        {activeTab === 'game' && (
-          <div className="cm-game-panel">
-            <div className="game-header">
-              <h2>Find a Game</h2>
-              {userProfile && (
-                <div className="user-vibe-selector">
-                  <label>My Vibe:</label>
-                  <select
-                    value={userProfile.vibe || 'casual'}
-                    onChange={(e) => updateVibe(e.target.value)}
-                  >
-                    <option value="casual">🎉 Casual</option>
-                    <option value="competitive">⚡ Competitive</option>
-                    <option value="social">🤝 Social</option>
-                  </select>
-                </div>
-              )}
-            </div>
-
-            {availablePlayers.length > 0 ? (
-              <SwipeCard
-                players={availablePlayers}
-                currentUserId={user.id}
-                userVibe={userProfile?.vibe || 'casual'}
-                onMatch={handlePlayerMatch}
-              />
-            ) : (
-              <div className="no-players">
-                <p>🔍 No players looking for a match right now.</p>
-                <p>Come back later or enable "Looking for Match" to get discovered!</p>
+        <div className="cm-game-panel" style={{ display: activeTab === 'game' ? 'block' : 'none' }}>
+          <div className="game-header">
+            <h2>Find a Game</h2>
+            {userProfile && (
+              <div className="user-vibe-selector">
+                <label>My Vibe:</label>
+                <select
+                  value={userProfile.vibe || 'casual'}
+                  onChange={(e) => updateVibe(e.target.value)}
+                >
+                  <option value="casual">🎉 Casual</option>
+                  <option value="competitive">⚡ Competitive</option>
+                  <option value="social">🤝 Social</option>
+                </select>
               </div>
             )}
           </div>
-        )}
+
+          {availablePlayers.length > 0 ? (
+            <SwipeCard
+              players={availablePlayers}
+              currentUserId={user.id}
+              userVibe={userProfile?.vibe || 'casual'}
+              onMatch={handlePlayerMatch}
+            />
+          ) : (
+            <div className="no-players">
+              <p>🔍 No players looking for a match right now.</p>
+              <p>Come back later or enable "Looking for Match" to get discovered!</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
