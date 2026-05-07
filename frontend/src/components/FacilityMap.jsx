@@ -349,24 +349,20 @@ function FacilityPopupContent({ f, onNavigateTo, user, savedFacilityIds, onSaveT
       )}
 
       {/* Action Buttons */}
-      <div className="popup-actions" style={{ marginTop: '12px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+      <div className="popup-actions">
         {onNavigateTo && (
-          <button className="popup-nav-btn" onClick={() => onNavigateTo(f)} style={{ flex: 1, minWidth: '70px', padding: '6px', margin: 0 }}>
+          <button className="popup-nav-btn" onClick={() => onNavigateTo(f)}>
             🚌 Route
           </button>
         )}
-        <button 
-          onClick={() => onShowDetails?.(f)} 
-          style={{ background: '#334155', border: 'none', color: '#f8fafc', padding: '6px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', flex: 1, minWidth: '70px', fontWeight: 600, fontFamily: 'inherit' }}
-        >
-          More Details
+        <button className="popup-details-btn" onClick={() => onShowDetails?.(f)}>
+          More Info
         </button>
         {user && onSaveToggle && (
           <button
             className={`popup-save-btn${isSaved ? ' saved' : ''}`}
             onClick={() => onSaveToggle(f)}
             title={isSaved ? 'Remove from saved' : 'Save place'}
-            style={{ width: '32px', padding: '6px 0', margin: 0, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             {isSaved ? '❤️' : '🤍'}
           </button>
@@ -377,7 +373,7 @@ function FacilityPopupContent({ f, onNavigateTo, user, savedFacilityIds, onSaveT
 }
 
 // ─── Component ───────────────────────────────────────────────────
-export default memo(function FacilityMap({ facilities = [], userLocation = null, routeInfo = null, onNavigateTo = null, user = null, savedFacilityIds = null, onSaveToggle = null, pinMode = false, pendingPin = null, onMapClick = null, selectedFacility = null, onShowDetails = null }) {
+export default memo(function FacilityMap({ facilities = [], userLocation = null, routeInfo = null, onNavigateTo = null, user = null, savedFacilityIds = null, onSaveToggle = null, pinMode = false, pendingPin = null, onMapClick = null, selectedFacility = null, onShowDetails = null, onFacilitySelect = null }) {
   const markerRefs = useRef({})
 
   function MapClickHandler({ pinMode, onMapClick }) {
@@ -436,24 +432,28 @@ export default memo(function FacilityMap({ facilities = [], userLocation = null,
       {/* Fly to selected facility */}
       <FlyToSelected selectedFacility={selectedFacility} markerRefs={markerRefs} />
 
-      {/* Facility markers */}
+      {/* Facility markers — tap opens FacilityHub directly when onFacilitySelect provided */}
       {facilities.map((f) => (
-        <Marker 
-          key={f.id} 
-          position={[f.lat, f.lng]} 
+        <Marker
+          key={f.id}
+          position={[f.lat, f.lng]}
           icon={f.is_verified === false ? getUserIcon(f.type) : getIcon(f.type)}
           ref={el => { if (el) markerRefs.current[f.id] = el }}
+          eventHandlers={onFacilitySelect ? { click: () => onFacilitySelect(f) } : {}}
         >
-          <Popup className="facility-popup">
-            <FacilityPopupContent 
-              f={f} 
-              onNavigateTo={onNavigateTo} 
-              user={user} 
-              savedFacilityIds={savedFacilityIds} 
-              onSaveToggle={onSaveToggle} 
-              onShowDetails={onShowDetails}
-            />
-          </Popup>
+          {/* Only show popup when hub is not wired (fallback) */}
+          {!onFacilitySelect && (
+            <Popup className="facility-popup">
+              <FacilityPopupContent
+                f={f}
+                onNavigateTo={onNavigateTo}
+                user={user}
+                savedFacilityIds={savedFacilityIds}
+                onSaveToggle={onSaveToggle}
+                onShowDetails={onShowDetails}
+              />
+            </Popup>
+          )}
         </Marker>
       ))}
 

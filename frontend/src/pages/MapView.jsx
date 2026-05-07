@@ -8,9 +8,9 @@ import { isInTampines } from '../utils/tampinesBoundary'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 
-const FacilityMap = lazy(() => import('../components/FacilityMap'))
+const FacilityMap   = lazy(() => import('../components/FacilityMap'))
+const FacilityHub   = lazy(() => import('../components/FacilityHub'))
 import SearchBar from '../components/SearchBar'
-import FacilitySidePane from '../components/FacilitySidePane'
 
 // ── Travel mode metadata ──────────────────────────────────────────
 const MODE_ICONS  = { walk: '🚶', drive: '🚗', cycle: '🚲', pt: '🚌' }
@@ -310,11 +310,24 @@ const RoutePanel = memo(function RoutePanel({ routeInfo, onClear }) {
 // ══════════════════════════════════════════════════════════════════
 // MAP AREA
 // ══════════════════════════════════════════════════════════════════
-const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, userLocation, onClearRoute, onNavigateTo, user, savedFacilityIds, onSaveToggle, pinMode, pendingPin, onTogglePinMode, onMapClick, selectedFacility, onSelectFacility, onShowDetails }) {
+const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, userLocation, onClearRoute, onNavigateTo, user, savedFacilityIds, onSaveToggle, pinMode, pendingPin, onTogglePinMode, onMapClick, selectedFacility, onSelectFacility, onFacilitySelect }) {
   return (
     <div className="map-area">
-      <div style={{ position: 'absolute', top: '16px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: 'calc(100% - 32px)', maxWidth: '520px' }}>
-        <SearchBar facilities={facilities} onSelectFacility={onSelectFacility} />
+      {/* Search bar slot — shrinks to a pill when pin mode is active */}
+      <div style={{ position: 'absolute', top: '16px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: 'calc(100% - 32px)', maxWidth: '520px', display: 'flex', justifyContent: 'center' }}>
+        {pinMode ? (
+          <div className="pin-mode-pill">
+            <span>📍</span>
+            <span>Tap anywhere on the map to place your spot</span>
+            <button className="pin-mode-pill-cancel" onClick={onTogglePinMode} aria-label="Cancel">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <SearchBar facilities={facilities} onSelectFacility={onSelectFacility} />
+        )}
       </div>
       {loading && (
         <div className="map-loading" aria-live="polite">
@@ -330,21 +343,23 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
           </div>
         </div>
       )}
-      {/* Pin mode banner */}
-      {pinMode && (
-        <div className="pin-mode-banner">
-          📍 Tap anywhere on the map to place your spot
-        </div>
-      )}
 
-      {/* Add Spot FAB */}
+      {/* Add Spot FAB — SVG icons so + and ✕ always center identically */}
       <button
         className={`map-fab${pinMode ? ' active' : ''}`}
         onClick={onTogglePinMode}
         aria-label={pinMode ? 'Cancel adding spot' : 'Add new spot'}
         title={pinMode ? 'Cancel' : 'Add a new spot'}
       >
-        {pinMode ? '✕' : '+'}
+        {pinMode ? (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        ) : (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/>
+          </svg>
+        )}
       </button>
 
       <Suspense fallback={null}>
@@ -360,7 +375,7 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
           pinMode={pinMode}
           pendingPin={pendingPin}
           onMapClick={onMapClick}
-          onShowDetails={onShowDetails}
+          onFacilitySelect={onFacilitySelect}
         />
       </Suspense>
       <RoutePanel routeInfo={routeInfo} onClear={onClearRoute} />
@@ -399,6 +414,7 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady, defaultNavMode = 'pt',
 
   // Sync preferred transport when user profile loads
   useEffect(() => { setNavMode(defaultNavMode) }, [defaultNavMode])
+
 
   // ── Poll GPS every 30 s ──────────────────────────────────────────
   useEffect(() => {
@@ -1141,7 +1157,7 @@ export default function MapView() {
       try {
         const { data, error } = await supabase
           .from('facilities')
-          .select('id, name, type, lat, lng, address, is_sheltered, is_indoor')
+          .select('id, name, type, lat, lng, address, is_sheltered, is_indoor, is_verified')
           .order('name')
         if (error) throw error
         if (!cancelled) setFacilities(data || [])
@@ -1181,21 +1197,23 @@ export default function MapView() {
         onMapClick={handleMapClick}
         selectedFacility={selectedFacility}
         onSelectFacility={setSelectedFacility}
-        onShowDetails={setDetailsFacility}
+        onFacilitySelect={setDetailsFacility}
       />
       <ChatSheet
         onRouteReady={onRouteReady}
         defaultNavMode={userProfile?.preferred_transport || 'pt'}
         userProfile={userProfile}
       />
-      <FacilitySidePane 
-        facility={detailsFacility} 
-        onClose={() => setDetailsFacility(null)} 
-        onNavigateTo={routeFromUserTo}
-        user={user}
-        isSaved={detailsFacility && savedFacilityIds.has(detailsFacility.id)}
-        onSaveToggle={onSaveToggle}
-      />
+      {/* Facility Hub — full detail sheet, replaces FacilitySidePane */}
+      {detailsFacility && (
+        <Suspense fallback={null}>
+          <FacilityHub
+            facility={detailsFacility}
+            onClose={() => setDetailsFacility(null)}
+            onNavigateTo={routeFromUserTo}
+          />
+        </Suspense>
+      )}
       {showAddForm && (
         <div className="add-spot-overlay">
           <div className="add-spot-sheet">
