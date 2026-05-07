@@ -283,6 +283,7 @@ input {
 .dropdown-menu.is-open .dropdown-item:nth-child(1) { opacity: 1; transform: none; transition-delay: 60ms; }
 .dropdown-menu.is-open .dropdown-item:nth-child(2) { opacity: 1; transform: none; transition-delay: 100ms; }
 .dropdown-menu.is-open .dropdown-item:nth-child(3) { opacity: 1; transform: none; transition-delay: 140ms; }
+.dropdown-menu.is-open .dropdown-item:nth-child(4) { opacity: 1; transform: none; transition-delay: 180ms; }
 
 /* ── Map Area ──────────────────────────────────────────────── */
 .map-area {
