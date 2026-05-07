@@ -1,0 +1,335 @@
+/* Swipe Card Styles */
+
+.swipe-card-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 20px;
+  position: relative;
+}
+
+/* Swipe Card */
+.swipe-card {
+  width: 100%;
+  max-width: 500px;
+  height: 600px;
+  background: var(--card-bg, #ffffff);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: grab;
+  active: grab;
+  transition: all 0.3s ease;
+  touch-action: none;
+}
+
+.swipe-card:active {
+  cursor: grabbing;
+}
+
+.swipe-card.swipe-left {
+  animation: swipeLeft 0.3s ease-out forwards;
+}
+
+.swipe-card.swipe-right {
+  animation: swipeRight 0.3s ease-out forwards;
+}
+
+@keyframes swipeLeft {
+  to {
+    transform: translateX(-150%) rotateZ(-30deg);
+    opacity: 0;
+  }
+}
+
+@keyframes swipeRight {
+  to {
+    transform: translateX(150%) rotateZ(30deg);
+    opacity: 0;
+  }
+}
+
+/* Card Header with Avatar */
+.card-header {
+  width: 100%;
+  height: 40%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.card-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.card-avatar-placeholder {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+/* Card Content */
+.card-content {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--card-bg, #ffffff);
+}
+
+.card-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.card-title h3 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary, #000000);
+}
+
+.card-distance {
+  font-size: 14px;
+  color: var(--text-secondary, #666666);
+}
+
+/* Card Stats */
+.card-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+  padding-top: 12px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.stat-label {
+  font-weight: 600;
+  color: var(--text-secondary, #666666);
+  min-width: 85px;
+}
+
+.stat-value {
+  color: var(--text-primary, #000000);
+  font-weight: 500;
+}
+
+.skill-badge {
+  padding: 4px 10px;
+  border-radius: 4px;
+  color: white;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.stat-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--tag-bg, #f0f0f0);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--text-primary, #000000);
+  border: 1px solid var(--border-color, #e0e0e0);
+}
+
+/* Card Bio */
+.card-bio {
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+}
+
+.card-bio p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-primary, #000000);
+  line-height: 1.5;
+}
+
+/* Card Actions */
+.card-actions {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: var(--card-bg, #ffffff);
+  border-top: 1px solid var(--border-color, #e0e0e0);
+}
+
+.btn-pass,
+.btn-match {
+  flex: 1;
+  padding: 12px 16px;
+  border: 2px solid var(--border-color, #e0e0e0);
+  border-radius: 8px;
+  background: var(--card-bg, #ffffff);
+  color: var(--text-primary, #000000);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-pass {
+  border-color: #ff6b6b;
+  color: #ff6b6b;
+}
+
+.btn-pass:hover {
+  background: #ffe0e0;
+}
+
+.btn-pass:active {
+  background: #ffcccc;
+  transform: scale(0.98);
+}
+
+.btn-match {
+  border-color: #4ecdc4;
+  color: white;
+  background: #4ecdc4;
+}
+
+.btn-match:hover {
+  background: #45b9b1;
+}
+
+.btn-match:active {
+  background: #3ba39c;
+  transform: scale(0.98);
+}
+
+/* Card Counter */
+.card-counter {
+  font-size: 14px;
+  color: var(--text-secondary, #666666);
+  font-weight: 500;
+  margin-bottom: 20px;
+}
+
+/* No Cards Message */
+.no-cards {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  text-align: center;
+  color: var(--text-secondary, #666666);
+}
+
+.no-cards p:first-child {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.no-cards p:last-child {
+  font-size: 14px;
+  margin: 0;
+  color: var(--text-secondary, #666666);
+}
+
+/* Scrollbar Styling for Card Content */
+.card-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.card-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.card-content::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-color, #ccc);
+  border-radius: 2px;
+}
+
+.card-content::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover, #999);
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .swipe-card {
+    height: 500px;
+    max-width: 100%;
+    margin: 0 16px;
+  }
+
+  .card-header {
+    height: 35%;
+  }
+
+  .card-content {
+    padding: 16px;
+    gap: 10px;
+  }
+
+  .card-title h3 {
+    font-size: 20px;
+  }
+
+  .stat-item {
+    font-size: 13px;
+  }
+
+  .btn-pass,
+  .btn-match {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+}
+
+/* Light mode */
+[data-theme='light'] .swipe-card {
+  --card-bg: #ffffff;
+  --text-primary: #000000;
+  --text-secondary: #666666;
+  --border-color: #e0e0e0;
+  --tag-bg: #f0f0f0;
+  --scrollbar-color: #ccc;
+  --scrollbar-hover: #999;
+}
+
+/* Dark mode */
+[data-theme='dark'] .swipe-card {
+  --card-bg: #2d2d2d;
+  --text-primary: #ffffff;
+  --text-secondary: #b0b0b0;
+  --border-color: #404040;
+  --tag-bg: #404040;
+  --scrollbar-color: #555;
+  --scrollbar-hover: #777;
+}

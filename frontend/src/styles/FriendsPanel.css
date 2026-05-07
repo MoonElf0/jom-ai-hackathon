@@ -1,0 +1,314 @@
+/* Friends Panel Styles */
+
+.friends-panel {
+  width: 100%;
+  max-width: 320px;
+  height: 100%;
+  background: var(--bg-secondary, #f5f5f5);
+  border-right: 1px solid var(--border-color, #e0e0e0);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Friends Header */
+.friends-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: var(--bg-secondary, #f5f5f5);
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+.friends-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary, #000000);
+}
+
+.squad-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--primary-color, #1976d2);
+  color: white;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Friends Search */
+.friends-search {
+  margin: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 8px;
+  background: var(--bg-primary, #ffffff);
+  color: var(--text-primary, #000000);
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.friends-search:focus {
+  border-color: var(--primary-color, #1976d2);
+  box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1);
+}
+
+.friends-search::placeholder {
+  color: var(--text-secondary, #999999);
+}
+
+/* Friends List */
+.friends-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.friend-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  background: var(--bg-secondary, #f5f5f5);
+}
+
+.friend-item:hover {
+  background: var(--bg-hover, #efefef);
+}
+
+.friend-item.active {
+  background: var(--primary-color, #1976d2);
+  color: white;
+}
+
+/* Friend Avatar */
+.friend-avatar-container {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.friend-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-primary, #ffffff);
+}
+
+.friend-avatar-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--avatar-bg, #d0d0d0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.friend-item.active .friend-avatar-placeholder {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.unread-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: #ff6b6b;
+  color: white;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  border: 2px solid var(--bg-primary, #ffffff);
+}
+
+/* Friend Info */
+.friend-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.friend-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #000000);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.friend-item.active .friend-name {
+  color: white;
+}
+
+.friend-last-msg {
+  font-size: 12px;
+  color: var(--text-secondary, #666666);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.friend-item.active .friend-last-msg {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Friend Meta */
+.friend-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.member-count {
+  font-size: 12px;
+  color: var(--text-secondary, #666666);
+}
+
+.friend-item.active .member-count {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.last-msg-time {
+  font-size: 11px;
+  color: var(--text-secondary, #999999);
+}
+
+.friend-item.active .last-msg-time {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Empty Friends */
+.empty-friends {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 8px;
+  padding: 20px;
+  text-align: center;
+  color: var(--text-secondary, #666666);
+}
+
+.empty-friends p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.empty-friends p:first-child {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+/* Scrollbar Styling */
+.friends-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.friends-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.friends-list::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-color, #ccc);
+  border-radius: 3px;
+}
+
+.friends-list::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover, #999);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .friends-panel {
+    max-width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color, #e0e0e0);
+    max-height: 240px;
+  }
+
+  .friends-list {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .friend-item {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px;
+    border-bottom: none;
+    border-right: 1px solid var(--border-color, #e0e0e0);
+    min-width: 80px;
+  }
+
+  .friend-info {
+    align-items: center;
+  }
+
+  .friend-name {
+    font-size: 12px;
+  }
+
+  .friend-last-msg {
+    display: none;
+  }
+
+  .friend-meta {
+    display: none;
+  }
+}
+
+/* Light mode */
+[data-theme='light'] .friends-panel {
+  --bg-secondary: #f5f5f5;
+  --bg-primary: #ffffff;
+  --text-primary: #000000;
+  --text-secondary: #666666;
+  --border-color: #e0e0e0;
+  --primary-color: #1976d2;
+  --bg-hover: #efefef;
+  --avatar-bg: #d0d0d0;
+  --scrollbar-color: #ccc;
+  --scrollbar-hover: #999;
+}
+
+/* Dark mode */
+[data-theme='dark'] .friends-panel {
+  --bg-secondary: #2d2d2d;
+  --bg-primary: #1e1e1e;
+  --text-primary: #ffffff;
+  --text-secondary: #b0b0b0;
+  --border-color: #404040;
+  --primary-color: #4a9eff;
+  --bg-hover: #383838;
+  --avatar-bg: #555555;
+  --scrollbar-color: #555;
+  --scrollbar-hover: #777;
+}
