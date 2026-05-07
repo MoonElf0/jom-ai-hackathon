@@ -15,6 +15,45 @@ function formatType(t) {
   return (t || '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 }
 
+// ── Opening hours by facility type (Singapore public facilities) ───────
+const FACILITY_HOURS = {
+  basketball_court:    { open: '07:00', close: '22:00' },
+  badminton_court:     { open: '07:00', close: '22:00' },
+  tennis_court:        { open: '07:00', close: '22:00' },
+  volleyball_court:    { open: '07:00', close: '22:00' },
+  football_field:      { open: '07:00', close: '22:00' },
+  futsal_court:        { open: '07:00', close: '22:00' },
+  multi_purpose_court: { open: '07:00', close: '22:00' },
+  swimming_pool:       { open: '06:30', close: '21:30' },
+  gym:                 { open: '07:00', close: '22:00' },
+  community_hall:      { open: '08:00', close: '22:00' },
+  playground:          { open: '07:00', close: '22:00' },
+  skate_park:          { open: '07:00', close: '22:00' },
+  // null = open 24 hours
+  fitness_corner:     null,
+  jogging_track:      null,
+  cycling_path:       null,
+  park:               null,
+  sheltered_pavilion: null,
+}
+
+function getOpenStatus(type) {
+  const hours = FACILITY_HOURS[type]
+  if (!hours) return { isOpen: true, label: 'Open 24 Hours', hoursStr: '24 Hours', is24h: true }
+
+  // Compute current Singapore time (UTC+8)
+  const now = new Date()
+  const sgMin = (now.getUTCHours() * 60 + now.getUTCMinutes() + 8 * 60) % (24 * 60)
+  const [oh, om] = hours.open.split(':').map(Number)
+  const [ch, cm] = hours.close.split(':').map(Number)
+  const openMin  = oh * 60 + om
+  const closeMin = ch * 60 + cm
+
+  const isOpen   = sgMin >= openMin && sgMin < closeMin
+  const hoursStr = `${hours.open} – ${hours.close}`
+  return { isOpen, label: isOpen ? 'Open Now' : 'Closed', hoursStr, is24h: false }
+}
+
 // ── Demo data seeded by id ─────────────────────────────────────────────
 const CROWD_LEVELS = [
   { label: 'Empty',    pct: 5,  colour: '#10b981', people: 0,  desc: 'Basically empty — perfect time to go!' },
@@ -197,27 +236,38 @@ export default function FacilitySidePane({ facility, onClose, onNavigateTo, user
         </div>
 
         {/* Tab content */}
-        {activeTab === 'overview' && (
-          <div className="side-pane-tab-content">
-            <div className="side-pane-info-row">
-              <span className="side-pane-info-icon">📍</span>
-              <span className="side-pane-info-text">{facility.address || 'Tampines, Singapore'}</span>
-            </div>
-            <div className="side-pane-info-row">
-              <span className="side-pane-info-icon">🕒</span>
-              <span className="side-pane-info-text" style={{ color: '#10b981', fontWeight: 600 }}>Open 24 Hours</span>
-            </div>
-            {(facility.is_sheltered || facility.is_indoor) && (
+        {activeTab === 'overview' && (() => {
+          const status = getOpenStatus(facility.type)
+          return (
+            <div className="side-pane-tab-content">
               <div className="side-pane-info-row">
-                <span className="side-pane-info-icon">✨</span>
-                <span className="side-pane-info-text">
-                  {facility.is_sheltered && 'Sheltered'}
-                  {facility.is_indoor && (facility.is_sheltered ? ' · Indoor' : 'Indoor')}
-                </span>
+                <span className="side-pane-info-icon">📍</span>
+                <span className="side-pane-info-text">{facility.address || 'Tampines, Singapore'}</span>
               </div>
-            )}
-          </div>
-        )}
+              <div className="side-pane-info-row">
+                <span className="side-pane-info-icon">🕒</span>
+                <div className="open-status-row">
+                  <span className={`open-status-badge ${status.isOpen ? 'open' : 'closed'}`}>
+                    <span>{status.isOpen ? '●' : '●'}</span>
+                    {status.label}
+                  </span>
+                  {!status.is24h && (
+                    <span className="open-status-hours">{status.hoursStr}</span>
+                  )}
+                </div>
+              </div>
+              {(facility.is_sheltered || facility.is_indoor) && (
+                <div className="side-pane-info-row">
+                  <span className="side-pane-info-icon">✨</span>
+                  <span className="side-pane-info-text">
+                    {facility.is_sheltered && 'Sheltered'}
+                    {facility.is_indoor && (facility.is_sheltered ? ' · Indoor' : 'Indoor')}
+                  </span>
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {activeTab === 'status' && <StatusTab facility={facility} />}
 

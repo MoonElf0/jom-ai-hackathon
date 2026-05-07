@@ -12,6 +12,20 @@ const FacilityMap = lazy(() => import('../components/FacilityMap'))
 import SearchBar from '../components/SearchBar'
 import FacilitySidePane from '../components/FacilitySidePane'
 
+// ── Facility type colours (for saved panel dots) ─────────────────
+const TYPE_COLOURS_MAP = {
+  fitness_corner: '#22d3ee', playground: '#4ade80', basketball_court: '#f97316',
+  badminton_court: '#a78bfa', tennis_court: '#fbbf24', swimming_pool: '#38bdf8',
+  multi_purpose_court: '#f472b6', gym: '#fb923c', jogging_track: '#86efac',
+  sheltered_pavilion: '#94a3b8', volleyball_court: '#34d399', football_field: '#10b981',
+  futsal_court: '#059669', cycling_path: '#60a5fa', community_hall: '#c084fc',
+  park: '#4ade80', skate_park: '#f87171',
+}
+
+function fmtType(t) {
+  return (t || '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+}
+
 // ── Travel mode metadata ──────────────────────────────────────────
 const MODE_ICONS  = { walk: '🚶', drive: '🚗', cycle: '🚲', pt: '🚌' }
 const MODE_LABELS = { walk: 'Walking', drive: 'Driving', cycle: 'Cycling', pt: 'Transit' }
@@ -140,7 +154,7 @@ function stripNavPrefix(text) {
 // ══════════════════════════════════════════════════════════════════
 // NAVBAR
 // ══════════════════════════════════════════════════════════════════
-const Navbar = memo(function Navbar({ onNavigateProfile, onNavigateCommunity, onSignOut }) {
+const Navbar = memo(function Navbar({ onNavigateProfile, onNavigateCommunity, onNavigateSaved, onSignOut }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -173,8 +187,8 @@ const Navbar = memo(function Navbar({ onNavigateProfile, onNavigateCommunity, on
           <button className="dropdown-item" onClick={() => { setIsMenuOpen(false); onNavigateCommunity?.() }} role="menuitem">
             🤝 Find a Game
           </button>
-          <button className="dropdown-item" onClick={() => setIsMenuOpen(false)} role="menuitem">
-            📍 Saved Areas
+          <button className="dropdown-item" onClick={() => { setIsMenuOpen(false); onNavigateSaved?.() }} role="menuitem">
+            ❤️ Saved Places
           </button>
           <button className="dropdown-item danger" onClick={onSignOut} role="menuitem">
             🚪 Log Out
@@ -310,6 +324,90 @@ const RoutePanel = memo(function RoutePanel({ routeInfo, onClear }) {
   )
 })
 
+// ══════════════════════════════════════════════════════════════════
+// SAVED PANEL
+// ══════════════════════════════════════════════════════════════════
+function SavedPanel({ facilities, savedFacilityIds, onClose, onNavigateTo, onShowDetails }) {
+  const saved = facilities.filter(f => savedFacilityIds?.has(f.id))
+
+  return (
+    <>
+      <div className="saved-panel-overlay" onClick={onClose} />
+      <div className="saved-panel" role="dialog" aria-label="Saved places">
+        <div className="saved-panel-header">
+          <h2 className="saved-panel-title">❤️ Saved Places</h2>
+          <button className="saved-panel-close" onClick={onClose} aria-label="Close saved panel">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6 6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div className="saved-panel-list">
+          {saved.length === 0 ? (
+            <div className="saved-panel-empty">
+              <p className="saved-panel-empty-icon">🤍</p>
+              <p className="saved-panel-empty-text">No saved places yet.</p>
+              <p className="saved-panel-empty-text" style={{ marginTop: 6, fontSize: 12 }}>
+                Tap ❤️ on any facility to save it here.
+              </p>
+            </div>
+          ) : saved.map(f => (
+            <div key={f.id} className="saved-panel-item">
+              <span className="saved-panel-dot" style={{ background: TYPE_COLOURS_MAP[f.type] || '#6366f1' }} />
+              <div className="saved-panel-info">
+                <p className="saved-panel-name">{f.name}</p>
+                <p className="saved-panel-type">{fmtType(f.type)}</p>
+              </div>
+              <div className="saved-panel-actions">
+                <button
+                  className="saved-panel-btn"
+                  title="Get directions"
+                  onClick={() => { onNavigateTo?.(f); onClose() }}
+                >🚌</button>
+                <button
+                  className="saved-panel-btn"
+                  title="View details"
+                  onClick={() => { onShowDetails?.(f); onClose() }}
+                >ℹ️</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── Opening hours (mirrors FacilitySidePane logic) ────────────────
+const _FACILITY_HOURS = {
+  basketball_court:    { open: '07:00', close: '22:00' },
+  badminton_court:     { open: '07:00', close: '22:00' },
+  tennis_court:        { open: '07:00', close: '22:00' },
+  volleyball_court:    { open: '07:00', close: '22:00' },
+  football_field:      { open: '07:00', close: '22:00' },
+  futsal_court:        { open: '07:00', close: '22:00' },
+  multi_purpose_court: { open: '07:00', close: '22:00' },
+  swimming_pool:       { open: '06:30', close: '21:30' },
+  gym:                 { open: '07:00', close: '22:00' },
+  community_hall:      { open: '08:00', close: '22:00' },
+  playground:          { open: '07:00', close: '22:00' },
+  skate_park:          { open: '07:00', close: '22:00' },
+  // null = 24 h
+  fitness_corner: null, jogging_track: null, cycling_path: null,
+  park: null, sheltered_pavilion: null,
+}
+
+function isFacilityOpen(type) {
+  const h = _FACILITY_HOURS[type]
+  if (!h) return true  // 24-hour facilities always open
+  const now   = new Date()
+  const sgMin = (now.getUTCHours() * 60 + now.getUTCMinutes() + 8 * 60) % (24 * 60)
+  const [oh, om] = h.open.split(':').map(Number)
+  const [ch, cm] = h.close.split(':').map(Number)
+  return sgMin >= oh * 60 + om && sgMin < ch * 60 + cm
+}
+
 // ── Mock data helpers for advanced filtering ──────────────────────
 const CROWD_LEVELS = [
   { label: 'Empty',    pct: 5,  colour: '#10b981', bg: 'rgba(16,185,129,0.15)', people: 0  },
@@ -325,32 +423,18 @@ function seedLevel(id) {
   return CROWD_LEVELS[h % CROWD_LEVELS.length]
 }
 
-function seedWeather(id) {
-  let h = 0
-  for (const c of String(id)) h = (h * 17 + c.charCodeAt(0)) & 0xffff
-  const chance = h % 100
-  return chance
-}
-
-const WEATHER_OPTIONS = [
-  { label: 'Any Rain Chance', value: 100 },
-  { label: 'Sunny/Low (<30%)', value: 30 },
-  { label: 'Moderate (<60%)', value: 60 },
-]
 
 // ══════════════════════════════════════════════════════════════════
 // MAP AREA
 // ══════════════════════════════════════════════════════════════════
 const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, userLocation, onClearRoute, onNavigateTo, user, savedFacilityIds, onSaveToggle, pinMode, pendingPin, onTogglePinMode, onMapClick, selectedFacility, onSelectFacility, onShowDetails }) {
-  const [selectedTypes, setSelectedTypes] = useState([])
-  const [selectedCrowds, setSelectedCrowds] = useState([])
-  const [maxRain, setMaxRain] = useState(100)
-  const [showFilter, setShowFilter] = useState(false)
-  const [showBasic, setShowBasic] = useState(true)
-  const [showAdvanced, setShowAdvanced] = useState(false)
-  
-  // Visual Toggles
-  const [showCongestionVisuals, setShowCongestionVisuals] = useState(false)
+  const [selectedTypes,    setSelectedTypes]    = useState([])
+  const [selectedCrowds,   setSelectedCrowds]   = useState([])
+  const [openFilter,       setOpenFilter]       = useState(null)  // null | 'open' | 'closed'
+  const [showFilter,       setShowFilter]       = useState(false)
+  const [showBasic,        setShowBasic]        = useState(true)
+  const [showAvailability, setShowAvailability] = useState(true)
+  const [showCongestion,   setShowCongestion]   = useState(true)
 
   const filterRef = useRef(null)
 
@@ -371,13 +455,11 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
         const crowd = seedLevel(f.id)
         if (!selectedCrowds.includes(crowd.label)) return false
       }
-      if (maxRain < 100) {
-        const rainChance = seedWeather(f.id)
-        if (rainChance > maxRain) return false
-      }
+      if (openFilter === 'open'   && !isFacilityOpen(f.type)) return false
+      if (openFilter === 'closed' &&  isFacilityOpen(f.type)) return false
       return true
     })
-  }, [facilities, selectedTypes, selectedCrowds, maxRain])
+  }, [facilities, selectedTypes, selectedCrowds, openFilter])
 
   function toggleFilter(type) {
     setSelectedTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type])
@@ -390,11 +472,11 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
   function clearFilters() {
     setSelectedTypes([])
     setSelectedCrowds([])
-    setMaxRain(100)
+    setOpenFilter(null)
   }
 
-  const isFilterActive = selectedTypes.length > 0 || selectedCrowds.length > 0 || maxRain < 100
-  const activeCount = selectedTypes.length + selectedCrowds.length + (maxRain < 100 ? 1 : 0)
+  const isFilterActive = selectedTypes.length > 0 || selectedCrowds.length > 0 || openFilter !== null
+  const activeCount    = selectedTypes.length + selectedCrowds.length + (openFilter ? 1 : 0)
 
   return (
     <div className="map-area">
@@ -447,41 +529,65 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
                     )}
                   </div>
 
-                  {/* Advanced Filtering */}
+                  {/* Availability */}
                   <div className="filter-section">
-                    <button className="filter-section-toggle" onClick={() => setShowAdvanced(!showAdvanced)}>
-                      <span>Advanced (Live Status)</span>
-                      <span className="filter-chevron">{showAdvanced ? '▲' : '▼'}</span>
+                    <button className="filter-section-toggle" onClick={() => setShowAvailability(!showAvailability)}>
+                      <span>Availability</span>
+                      <span className="filter-chevron">{showAvailability ? '▲' : '▼'}</span>
                     </button>
-                    {showAdvanced && (
-                      <div className="filter-section-body" style={{ padding: '4px 14px 14px' }}>
-                        <p className="filter-sublabel">Map Visuals</p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
-                          <label className="filter-check-label">
-                            <input type="checkbox" checked={showCongestionVisuals} onChange={() => setShowCongestionVisuals(!showCongestionVisuals)} style={{ accentColor: '#f97316' }} />
-                            <span className="filter-check-text">Emphasize Congestion (Size/Ring)</span>
-                          </label>
+                    {showAvailability && (
+                      <div className="filter-section-body" style={{ padding: '8px 14px 14px' }}>
+                        <p className="filter-sublabel" style={{ marginBottom: 8 }}>Show only facilities that are…</p>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          {[
+                            { value: 'open',   label: '🟢 Open Now',  colour: '#10b981' },
+                            { value: 'closed', label: '🔴 Closed',    colour: '#ef4444' },
+                          ].map(opt => {
+                            const active = openFilter === opt.value
+                            return (
+                              <button
+                                key={opt.value}
+                                className={`filter-crowd-btn${active ? ' active' : ''}`}
+                                onClick={() => setOpenFilter(active ? null : opt.value)}
+                                style={active ? { background: `${opt.colour}22`, color: opt.colour, borderColor: opt.colour } : {}}
+                              >
+                                {opt.label}
+                              </button>
+                            )
+                          })}
                         </div>
-                        {showCongestionVisuals && (
-                          <div className="filter-crowd-section">
-                            <p className="filter-sublabel">Filter by Congestion Level</p>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                              {CROWD_LEVELS.map(level => {
-                                const active = selectedCrowds.includes(level.label)
-                                return (
-                                  <button
-                                    key={level.label}
-                                    className={`filter-crowd-btn${active ? ' active' : ''}`}
-                                    onClick={() => toggleCrowd(level.label)}
-                                    style={active ? { background: `${level.colour}22`, color: level.colour, borderColor: level.colour } : {}}
-                                  >
-                                    {level.label}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </div>
+                        {openFilter && (
+                          <p className="filter-sublabel" style={{ marginTop: 8, fontSize: 10 }}>
+                            Based on standard Singapore public facility hours
+                          </p>
                         )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Congestion Level */}
+                  <div className="filter-section">
+                    <button className="filter-section-toggle" onClick={() => setShowCongestion(!showCongestion)}>
+                      <span>Congestion Level</span>
+                      <span className="filter-chevron">{showCongestion ? '▲' : '▼'}</span>
+                    </button>
+                    {showCongestion && (
+                      <div className="filter-section-body" style={{ padding: '8px 14px 14px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {CROWD_LEVELS.map(level => {
+                            const active = selectedCrowds.includes(level.label)
+                            return (
+                              <button
+                                key={level.label}
+                                className={`filter-crowd-btn${active ? ' active' : ''}`}
+                                onClick={() => toggleCrowd(level.label)}
+                                style={active ? { background: `${level.colour}22`, color: level.colour, borderColor: level.colour } : {}}
+                              >
+                                {level.label}
+                              </button>
+                            )
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -540,7 +646,7 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
       <Suspense fallback={null}>
         <FacilityMap
           facilities={filteredFacilities}
-          showCongestionVisuals={showCongestionVisuals}
+          showCongestionVisuals={true}
           routeInfo={routeInfo}
           userLocation={userLocation}
           selectedFacility={selectedFacility}
@@ -1147,8 +1253,9 @@ export default function MapView() {
   const [pendingPin,   setPendingPin]   = useState(null)
   const [showAddForm,  setShowAddForm]  = useState(false)
   const [addForm,      setAddForm]      = useState({ name: '', type: 'basketball_court', address: '', isSheltered: false, isIndoor: false })
-  const [addingSpot,   setAddingSpot]   = useState(false)
-  const [addSpotError, setAddSpotError] = useState(null)
+  const [addingSpot,      setAddingSpot]      = useState(false)
+  const [addSpotError,    setAddSpotError]    = useState(null)
+  const [showSavedPanel,  setShowSavedPanel]  = useState(false)
 
   // Filter to only facilities actually inside the Tampines boundary polygon
   const tampinesFacilities = useMemo(
@@ -1357,6 +1464,7 @@ export default function MapView() {
       <Navbar
         onNavigateProfile={() => navigate('/profile')}
         onNavigateCommunity={() => navigate('/community')}
+        onNavigateSaved={() => setShowSavedPanel(true)}
         onSignOut={handleSignOut}
       />
       <MapArea
@@ -1391,6 +1499,16 @@ export default function MapView() {
         isSaved={detailsFacility && savedFacilityIds.has(detailsFacility.id)}
         onSaveToggle={onSaveToggle}
       />
+      {showSavedPanel && (
+        <SavedPanel
+          facilities={tampinesFacilities}
+          savedFacilityIds={savedFacilityIds}
+          onClose={() => setShowSavedPanel(false)}
+          onNavigateTo={routeFromUserTo}
+          onShowDetails={setDetailsFacility}
+        />
+      )}
+
       {showAddForm && (
         <div className="add-spot-overlay">
           <div className="add-spot-sheet">

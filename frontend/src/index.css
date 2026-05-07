@@ -262,11 +262,11 @@ input {
 }
 
 .dropdown-item.danger {
-  color: var(--accent);
+  color: #ef4444;
 }
 
 .dropdown-item.danger:hover {
-  background: var(--accent-dim);
+  background: rgba(239, 68, 68, 0.1);
 }
 
 /* Stagger children animation */
@@ -280,9 +280,10 @@ input {
     color var(--transition-fast);
 }
 
-.dropdown-menu.is-open .dropdown-item:nth-child(1) { opacity: 1; transform: none; transition-delay: 60ms; }
+.dropdown-menu.is-open .dropdown-item:nth-child(1) { opacity: 1; transform: none; transition-delay:  60ms; }
 .dropdown-menu.is-open .dropdown-item:nth-child(2) { opacity: 1; transform: none; transition-delay: 100ms; }
 .dropdown-menu.is-open .dropdown-item:nth-child(3) { opacity: 1; transform: none; transition-delay: 140ms; }
+.dropdown-menu.is-open .dropdown-item:nth-child(4) { opacity: 1; transform: none; transition-delay: 180ms; }
 
 /* ── Map Area ──────────────────────────────────────────────── */
 .map-area {
@@ -2665,4 +2666,163 @@ input {
 .sb-fav-empty {
   padding: 20px 12px;
   text-align: center;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SAVED PANEL
+══════════════════════════════════════════════════════════════ */
+.saved-panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 2000;
+  animation: fade-in 0.18s ease;
+}
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+
+.saved-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(340px, 100vw);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 32px rgba(0,0,0,0.18);
+  z-index: 2001;
+  display: flex;
+  flex-direction: column;
+  animation: slide-in-right 0.22s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0 }
+  to   { transform: translateX(0);    opacity: 1 }
+}
+
+.saved-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 16px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.saved-panel-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+.saved-panel-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.saved-panel-close:hover { background: var(--border); color: var(--text); }
+
+.saved-panel-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.saved-panel-empty {
+  padding: 48px 20px;
+  text-align: center;
+}
+.saved-panel-empty-icon { font-size: 40px; margin-bottom: 10px; }
+.saved-panel-empty-text {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.saved-panel-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  transition: background var(--transition-fast);
+}
+.saved-panel-item:hover { background: var(--surface-2); }
+.saved-panel-item:last-child { border-bottom: none; }
+
+.saved-panel-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.saved-panel-info { flex: 1; min-width: 0; }
+.saved-panel-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.saved-panel-type {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.saved-panel-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.saved-panel-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.saved-panel-btn:hover  { background: var(--border); transform: scale(1.08); }
+.saved-panel-btn:active { transform: scale(0.95); }
+
+/* ── Opening hours status badge ── */
+.open-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.open-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.open-status-badge.open {
+  background: rgba(16,185,129,0.15);
+  color: #10b981;
+  border: 1px solid rgba(16,185,129,0.3);
+}
+.open-status-badge.closed {
+  background: rgba(239,68,68,0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239,68,68,0.25);
+}
+.open-status-hours {
+  font-size: 12px;
+  color: var(--text-muted);
 }
