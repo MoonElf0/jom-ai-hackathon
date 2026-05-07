@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../utils/useAuth'
 import { supabase } from '../utils/supabaseClient'
 import SwipeCard from '../components/SwipeCard'
@@ -51,8 +52,69 @@ const SAMPLE_PLAYERS = [
   },
 ]
 
+// ══════════════════════════════════════════════════════════════════
+// NAVBAR
+// ══════════════════════════════════════════════════════════════════
+function CommunityMatcherNavbar({ onNavigateBack, onNavigateProfile, onSignOut }) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+
+  useEffect(() => {
+    if (!isMenuOpen) return
+    const close = (e) => {
+      if (!e.target.closest('.dropdown-wrapper')) setIsMenuOpen(false)
+    }
+    const t = setTimeout(() => document.addEventListener('pointerdown', close), 30)
+    return () => { clearTimeout(t); document.removeEventListener('pointerdown', close) }
+  }, [isMenuOpen])
+
+  return (
+    <nav className="navbar">
+      <div className="dropdown-wrapper">
+        <button
+          className={`btn-menu${isMenuOpen ? ' is-open' : ''}`}
+          onClick={() => setIsMenuOpen(v => !v)}
+          aria-label="Open navigation menu"
+          aria-expanded={isMenuOpen}
+        >
+          <div className="btn-menu-bar" />
+          <div className="btn-menu-bar" />
+          <div className="btn-menu-bar" />
+        </button>
+
+        <div className={`dropdown-menu${isMenuOpen ? ' is-open' : ''}`} role="menu" align="center">
+          <button className="dropdown-item" onClick={() => { setIsMenuOpen(false); onNavigateBack() }} role="menuitem">
+            ← Back to Map
+          </button>
+          <button className="dropdown-item" onClick={() => setIsMenuOpen(false)} role="menuitem">
+            Community Matcher
+          </button>
+          <button className="dropdown-item" onClick={() => setIsMenuOpen(false)} role="menuitem">
+            Saved Areas
+          </button>
+          <button className="dropdown-item danger" onClick={onSignOut} role="menuitem">
+            Log Out
+          </button>
+        </div>
+      </div>
+
+      <div className="navbar-logo">
+        <span className="navbar-logo-text">JOM AI</span>
+        <span className="navbar-logo-sub">Community</span>
+      </div>
+
+      <button className="btn-profile" onClick={onNavigateProfile} aria-label="Go to profile">
+        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+      </button>
+    </nav>
+  )
+}
+
 export default function CommunityMatcher() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('squad') // 'squad' or 'game'
   const [userProfile, setUserProfile] = useState(null)
   const [availablePlayers, setAvailablePlayers] = useState([])
@@ -293,16 +355,34 @@ export default function CommunityMatcher() {
     }
   }
 
+  async function handleSignOut() {
+    await supabase.auth.signOut()
+    navigate('/auth', { replace: true })
+  }
+
   if (loading) {
     return (
-      <div className="community-matcher-container">
-        <div className="loading-spinner">Loading...</div>
+      <div className="community-matcher-page">
+        <CommunityMatcherNavbar
+          onNavigateBack={() => navigate('/')}
+          onNavigateProfile={() => navigate('/profile')}
+          onSignOut={handleSignOut}
+        />
+        <div className="community-matcher-container">
+          <div className="loading-spinner">Loading...</div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="community-matcher-container">
+    <div className="community-matcher-page">
+      <CommunityMatcherNavbar
+        onNavigateBack={() => navigate('/')}
+        onNavigateProfile={() => navigate('/profile')}
+        onSignOut={handleSignOut}
+      />
+      <div className="community-matcher-container">
       {/* Tab navigation */}
       <div className="cm-tabs">
         <button
@@ -395,6 +475,7 @@ export default function CommunityMatcher() {
           )}
         </div>
       </div>
+    </div>
     </div>
   )
 }
