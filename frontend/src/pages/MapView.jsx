@@ -307,14 +307,236 @@ const RoutePanel = memo(function RoutePanel({ routeInfo, onClear }) {
   )
 })
 
+// ── Mock data helpers for advanced filtering ──────────────────────
+const CROWD_LEVELS = [
+  { label: 'Empty',    pct: 5,  colour: '#10b981', bg: 'rgba(16,185,129,0.15)', people: 0  },
+  { label: 'Quiet',   pct: 25, colour: '#34d399', bg: 'rgba(52,211,153,0.15)', people: 2  },
+  { label: 'Moderate',pct: 55, colour: '#fbbf24', bg: 'rgba(251,191,36,0.15)', people: 7  },
+  { label: 'Busy',    pct: 80, colour: '#f97316', bg: 'rgba(249,115,22,0.15)', people: 14 },
+  { label: 'Full',    pct: 98, colour: '#ef4444', bg: 'rgba(239,68,68,0.15)',  people: 20 },
+]
+
+function seedLevel(id) {
+  let h = 0
+  for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) & 0xffff
+  return CROWD_LEVELS[h % CROWD_LEVELS.length]
+}
+
+function seedWeather(id) {
+  let h = 0
+  for (const c of String(id)) h = (h * 17 + c.charCodeAt(0)) & 0xffff
+  const chance = h % 100
+  return chance
+}
+
+const WEATHER_OPTIONS = [
+  { label: 'Any Rain Chance', value: 100 },
+  { label: 'Sunny/Low (<30%)', value: 30 },
+  { label: 'Moderate (<60%)', value: 60 },
+]
+
 // ══════════════════════════════════════════════════════════════════
 // MAP AREA
 // ══════════════════════════════════════════════════════════════════
 const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, userLocation, onClearRoute, onNavigateTo, user, savedFacilityIds, onSaveToggle, pinMode, pendingPin, onTogglePinMode, onMapClick, selectedFacility, onSelectFacility, onShowDetails }) {
+  const [selectedTypes, setSelectedTypes] = useState([])
+  const [selectedCrowds, setSelectedCrowds] = useState([])
+  const [maxRain, setMaxRain] = useState(100)
+  const [showFilter, setShowFilter] = useState(false)
+  const [showBasic, setShowBasic] = useState(true)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  
+  // Visual Toggles
+  const [showWeatherBar, setShowWeatherBar] = useState(true)
+  const [showCongestionVisuals, setShowCongestionVisuals] = useState(false)
+
+  const filterRef = useRef(null)
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (filterRef.current && !filterRef.current.contains(e.target)) {
+        setShowFilter(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const filteredFacilities = useMemo(() => {
+    return facilities.filter(f => {
+      if (selectedTypes.length > 0 && !selectedTypes.includes(f.type)) return false
+      if (selectedCrowds.length > 0) {
+        const crowd = seedLevel(f.id)
+        if (!selectedCrowds.includes(crowd.label)) return false
+      }
+      if (maxRain < 100) {
+        const rainChance = seedWeather(f.id)
+        if (rainChance > maxRain) return false
+      }
+      return true
+    })
+  }, [facilities, selectedTypes, selectedCrowds, maxRain])
+
+  function toggleFilter(type) {
+    setSelectedTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type])
+  }
+
+  function toggleCrowd(label) {
+    setSelectedCrowds(prev => prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label])
+  }
+
+  function clearFilters() {
+    setSelectedTypes([])
+    setSelectedCrowds([])
+    setMaxRain(100)
+  }
+
+  const isFilterActive = selectedTypes.length > 0 || selectedCrowds.length > 0 || maxRain < 100
+  const activeCount = selectedTypes.length + selectedCrowds.length + (maxRain < 100 ? 1 : 0)
+
   return (
     <div className="map-area">
-      <div style={{ position: 'absolute', top: '16px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: 'calc(100% - 32px)', maxWidth: '520px' }}>
-        <SearchBar facilities={facilities} onSelectFacility={onSelectFacility} />
+      <div style={{ position: 'absolute', top: '16px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: 'calc(100% - 32px)', maxWidth: '520px', display: 'flex', gap: '8px' }}>
+        <div style={{ flex: 1 }}>
+          <SearchBar facilities={filteredFacilities} onSelectFacility={onSelectFacility} />
+        </div>
+        
+        {/* Filter Button & Dropdown */}
+        <div ref={filterRef} style={{ position: 'relative' }}>
+          <button
+            onClick={() => setShowFilter(!showFilter)}
+            style={{
+              height: '100%',
+              padding: '0 14px',
+              background: isFilterActive ? '#6366f1' : '#1e2130',
+              border: '1px solid ' + (isFilterActive ? '#6366f1' : '#2a2d3a'),
+              borderRadius: '12px',
+              color: '#fff',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s',
+            }}
+            title="Filter facilities"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            {activeCount > 0 && (
+              <span style={{ marginLeft: '6px', fontSize: '12px', fontWeight: 'bold' }}>{activeCount}</span>
+            )}
+          </button>
+
+          {showFilter && (
+            <div style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: '8px',
+              background: '#1e2130', border: '1px solid #2a2d3a', borderRadius: '12px',
+              width: '260px', maxHeight: '450px', overflowY: 'auto',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.5)', zIndex: 2001,
+              display: 'flex', flexDirection: 'column'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid #2a2d3a', position: 'sticky', top: 0, background: '#1e2130', zIndex: 2 }}>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#e2e8f0' }}>Filters</span>
+                {isFilterActive && (
+                  <button onClick={clearFilters} style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: '12px', cursor: 'pointer', fontWeight: 500 }}>
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Basic Filtering (Sports) */}
+              <div style={{ borderBottom: '1px solid #2a2d3a' }}>
+                <button 
+                  onClick={() => setShowBasic(!showBasic)}
+                  style={{ width: '100%', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', background: 'transparent', border: 'none', color: '#e2e8f0', fontSize: '13px', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
+                >
+                  Basic (Sports)
+                  <span>{showBasic ? '▲' : '▼'}</span>
+                </button>
+                {showBasic && (
+                  <div style={{ padding: '0 0 8px 0' }}>
+                    {SPOT_TYPE_OPTIONS.map(opt => (
+                      <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 14px', cursor: 'pointer', transition: 'background 0.1s' }} onMouseEnter={e => e.currentTarget.style.background = '#252839'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <input type="checkbox" checked={selectedTypes.includes(opt.value)} onChange={() => toggleFilter(opt.value)} style={{ cursor: 'pointer', accentColor: '#6366f1' }} />
+                        <span style={{ fontSize: '13px', color: '#94a3b8' }}>{opt.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Advanced Filtering (Weather & Congestion) */}
+              <div>
+                <button 
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  style={{ width: '100%', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', background: 'transparent', border: 'none', color: '#e2e8f0', fontSize: '13px', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
+                >
+                  Advanced (Live Status)
+                  <span>{showAdvanced ? '▲' : '▼'}</span>
+                </button>
+                {showAdvanced && (
+                  <div style={{ padding: '4px 14px 14px' }}>
+                    {/* Map Visuals Toggles (Always Visible) */}
+                    <div style={{ marginBottom: '16px' }}>
+                      <p style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Map Visuals</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={showCongestionVisuals} 
+                            onChange={() => setShowCongestionVisuals(!showCongestionVisuals)} 
+                            style={{ accentColor: '#f97316', cursor: 'pointer' }} 
+                          />
+                          <span style={{ fontSize: '13px', color: '#e2e8f0' }}>Emphasize Congestion (Size/Colour)</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={showWeatherBar} 
+                            onChange={() => setShowWeatherBar(!showWeatherBar)} 
+                            style={{ accentColor: '#38bdf8', cursor: 'pointer' }} 
+                          />
+                          <span style={{ fontSize: '13px', color: '#e2e8f0' }}>Show Weather Bar</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Congestion Options (Only visible if visual is on) */}
+                    {showCongestionVisuals && (
+                      <div style={{ marginBottom: '16px', paddingTop: '16px', borderTop: '1px solid #2a2d3a' }}>
+                        <p style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Filter by Congestion Level</p>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {CROWD_LEVELS.map(level => {
+                            const active = selectedCrowds.includes(level.label)
+                            return (
+                              <button
+                                key={level.label}
+                                onClick={() => toggleCrowd(level.label)}
+                                style={{
+                                  padding: '4px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, cursor: 'pointer',
+                                  background: active ? `${level.colour}33` : '#0f172a',
+                                  color: active ? level.colour : '#94a3b8',
+                                  border: `1px solid ${active ? level.colour : '#334155'}`
+                                }}
+                              >
+                                {level.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+
+
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
+        </div>
       </div>
       {loading && (
         <div className="map-loading" aria-live="polite">
@@ -349,7 +571,9 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
 
       <Suspense fallback={null}>
         <FacilityMap
-          facilities={facilities}
+          facilities={filteredFacilities}
+          showWeatherBar={showWeatherBar}
+          showCongestionVisuals={showCongestionVisuals}
           routeInfo={routeInfo}
           userLocation={userLocation}
           selectedFacility={selectedFacility}
