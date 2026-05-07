@@ -95,7 +95,7 @@ const TYPE_ICONS = {
   fitness_corner: '🏋️',
   gym: '💪',
   swimming_pool: '🏊',
-  playground: '🛝',
+  playground: '🎠',
   cycling_path: '🚴',
   jogging_track: '🏃',
   multi_purpose_court: '🏟️',
@@ -158,69 +158,49 @@ function seedWeather(id) {
   return { chance, colour }
 }
 
+// ── Crowd → ring colour (always visible, no bar needed) ──────────
+function crowdRingColor(pct) {
+  if (pct <= 25) return '#10b981'   // green  — empty / quiet
+  if (pct <= 55) return '#fbbf24'   // yellow — moderate
+  if (pct <= 80) return '#f97316'   // orange — busy
+  return '#ef4444'                   // red    — full
+}
+
 // ─── Icon cache ──────────────────────────────────────────────────
 const iconCache = {}
 
-function getIcon(facility, showWeather, showCongestion) {
-  const cacheKey = `${facility.id}-${showWeather}-${showCongestion}`
+function getIcon(facility, showCongestion) {
+  const cacheKey = `${facility.id}-${showCongestion}`
   if (iconCache[cacheKey]) return iconCache[cacheKey]
-  const type = facility.type
-  const colour = TYPE_COLOURS[type] || '#6366f1'
-  const emoji = TYPE_ICONS[type] || '📍'
-  
-  const crowd = seedLevel(facility.id)
-  const weather = seedWeather(facility.id)
 
-  let size = 28
-  let border = '2.5px solid white'
+  const emoji      = TYPE_ICONS[facility.type] || '📍'
+  const crowd      = seedLevel(facility.id)
+  const bgColour   = crowdRingColor(crowd.pct)   // background = crowd level
+
+  let size  = 36
   let badge = ''
 
-  if (showCongestion) {
-    if (crowd.label === 'Busy') {
-      size = 34
-      border = '3px solid #f97316'
-      badge = `<span style="position:absolute; top:-4px; right:-4px; background:#f97316; color:white; border-radius:50%; width:14px; height:14px; font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; border:1.5px solid white; z-index: 10;">!</span>`
-    } else if (crowd.label === 'Full') {
-      size = 38
-      border = '3px solid #ef4444'
-      badge = `<span style="position:absolute; top:-4px; right:-4px; background:#ef4444; color:white; border-radius:50%; width:16px; height:16px; font-size:11px; font-weight:bold; display:flex; align-items:center; justify-content:center; border:1.5px solid white; z-index: 10;">!</span>`
-    }
+  if (showCongestion && (crowd.label === 'Busy' || crowd.label === 'Full')) {
+    size  = crowd.label === 'Full' ? 42 : 38
+    badge = `<span style="position:absolute;top:-4px;right:-4px;background:${bgColour};color:white;border-radius:50%;width:14px;height:14px;font-size:9px;font-weight:bold;display:flex;align-items:center;justify-content:center;border:1.5px solid white;z-index:10;">!</span>`
   }
 
-  const barWidth = 6 // 4px bar + 2px gap
-  const wrapperWidth = size + (showWeather ? barWidth : 0)
-  const iconAnchorX = (size / 2) + (showWeather ? barWidth : 0)
-  const iconAnchorY = size / 2
-
   const html = `
-    <div style="display: flex; align-items: flex-end; gap: 4px; position: relative;" title="Congestion: ${crowd.label} | Rain Chance: ${weather.chance}%">
-      <!-- Bars -->
-      ${showWeather ? `
-      <div style="display: flex; gap: 2px; height: 26px; align-items: flex-end; margin-bottom: 2px;">
-        <!-- Rain Chance Bar -->
-        <div style="width: 4px; height: 100%; background: transparent; display: flex; align-items: flex-end;">
-          <div style="width: 100%; height: ${Math.max(10, weather.chance)}%; background: #0ea5e9; border-radius: 2px;"></div>
-        </div>
-      </div>
-      ` : ''}
-      <!-- Original Icon -->
-      <div style="position: relative;">
-        <div class="facility-marker" style="
-          width: ${size}px; height: ${size}px;
-          background: ${colour};
-          border: ${border};
-          border-radius: 50%;
-          display: flex; align-items: center; justify-content: center;
-          box-shadow: 0 3px 8px rgba(0,0,0,0.35);
-          font-size: ${Math.max(14, size/2.2)}px;
-          line-height: 1;
-          transition: all 0.3s ease;
-        ">${emoji}</div>
-        ${badge}
-      </div>
+    <div style="position:relative;display:inline-flex;" title="Crowd: ${crowd.label} · ${crowd.people} people nearby">
+      <div style="
+        width:${size}px;height:${size}px;
+        background:${bgColour};
+        border:2.5px solid rgba(255,255,255,0.9);
+        border-radius:50%;
+        display:flex;align-items:center;justify-content:center;
+        box-shadow:0 2px 10px rgba(0,0,0,0.3);
+        font-size:${Math.round(size / 2.1)}px;
+        line-height:1;
+      ">${emoji}</div>
+      ${badge}
     </div>`
-  
-  const icon = L.divIcon({ html, className: '', iconSize: [wrapperWidth, size], iconAnchor: [iconAnchorX, iconAnchorY], popupAnchor: [- (showWeather ? barWidth : 0)/2, -size/2 - 2] })
+
+  const icon = L.divIcon({ html, className: '', iconSize: [size, size], iconAnchor: [size/2, size/2], popupAnchor: [0, -size/2 - 4] })
   iconCache[cacheKey] = icon
   return icon
 }
@@ -246,64 +226,42 @@ const PENDING_PIN_ICON = L.divIcon({
   popupAnchor: [0, -16],
 })
 
-// Community-submitted facility: same emoji but with a gold star badge
-function getUserIcon(facility, showWeather, showCongestion) {
-  const type = facility.type
-  const colour = TYPE_COLOURS[type] || '#f59e0b'
-  const emoji = TYPE_ICONS[type] || '📍'
-  
-  const crowd = seedLevel(facility.id)
-  const weather = seedWeather(facility.id)
+// Community-submitted facility: same style as getIcon but with a gold star badge
+function getUserIcon(facility, showCongestion) {
+  const cacheKey = `user-${facility.id}-${showCongestion}`
+  if (iconCache[cacheKey]) return iconCache[cacheKey]
 
-  let size = 28
-  let border = '2.5px solid #fbbf24'
-  let badge = `<span style="position:absolute; top:-4px; right:-4px; background:#fbbf24; color:#fff; border-radius:50%; width:12px; height:12px; font-size:8px; font-weight:700; display:flex; align-items:center; justify-content:center; border:1.5px solid white;">★</span>`
+  const emoji    = TYPE_ICONS[facility.type] || '📍'
+  const crowd    = seedLevel(facility.id)
+  const bgColour = crowdRingColor(crowd.pct)   // background = crowd level
 
-  if (showCongestion) {
-    if (crowd.label === 'Busy') {
-      size = 34
-      border = '3px solid #f97316'
-      badge = `<span style="position:absolute; top:-4px; right:-4px; background:#f97316; color:white; border-radius:50%; width:14px; height:14px; font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; border:1.5px solid white; z-index: 10;">!</span>`
-    } else if (crowd.label === 'Full') {
-      size = 38
-      border = '3px solid #ef4444'
-      badge = `<span style="position:absolute; top:-4px; right:-4px; background:#ef4444; color:white; border-radius:50%; width:16px; height:16px; font-size:11px; font-weight:bold; display:flex; align-items:center; justify-content:center; border:1.5px solid white; z-index: 10;">!</span>`
-    }
+  let size  = 36
+  // Community spots always show the gold star badge; busy/full override with !
+  let badge = `<span style="position:absolute;top:-4px;right:-4px;background:#fbbf24;color:#fff;border-radius:50%;width:13px;height:13px;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;border:1.5px solid white;">★</span>`
+
+  if (showCongestion && (crowd.label === 'Busy' || crowd.label === 'Full')) {
+    size  = crowd.label === 'Full' ? 42 : 38
+    badge = `<span style="position:absolute;top:-4px;right:-4px;background:${bgColour};color:white;border-radius:50%;width:14px;height:14px;font-size:9px;font-weight:bold;display:flex;align-items:center;justify-content:center;border:1.5px solid white;z-index:10;">!</span>`
   }
 
-  const barWidth = 6 // 4px bar + 2px gap
-  const wrapperWidth = size + (showWeather ? barWidth : 0)
-  const iconAnchorX = (size / 2) + (showWeather ? barWidth : 0)
-  const iconAnchorY = size / 2
-
   const html = `
-    <div style="display: flex; align-items: flex-end; gap: 4px; position: relative;" title="Congestion: ${crowd.label} | Rain Chance: ${weather.chance}%">
-      <!-- Bars -->
-      ${showWeather ? `
-      <div style="display: flex; gap: 2px; height: 26px; align-items: flex-end; margin-bottom: 2px;">
-        <!-- Rain Chance Bar -->
-        <div style="width: 4px; height: 100%; background: transparent; display: flex; align-items: flex-end;">
-          <div style="width: 100%; height: ${Math.max(10, weather.chance)}%; background: #0ea5e9; border-radius: 2px;"></div>
-        </div>
-      </div>
-      ` : ''}
-      <!-- Original Icon -->
-      <div style="position:relative; width:${size}px; height:${size}px;">
-        <div style="
-          width: ${size}px; height: ${size}px;
-          background: ${colour};
-          border: ${border};
-          border-radius: 50%;
-          display: flex; align-items: center; justify-content: center;
-          box-shadow: 0 3px 8px rgba(0,0,0,0.35);
-          font-size: ${Math.max(14, size/2.2)}px;
-          line-height: 1;
-          transition: all 0.3s ease;
-        ">${emoji}</div>
-        ${badge}
-      </div>
+    <div style="position:relative;display:inline-flex;" title="Crowd: ${crowd.label} · ${crowd.people} people nearby">
+      <div style="
+        width:${size}px;height:${size}px;
+        background:${bgColour};
+        border:2.5px solid rgba(255,255,255,0.9);
+        border-radius:50%;
+        display:flex;align-items:center;justify-content:center;
+        box-shadow:0 2px 10px rgba(0,0,0,0.3);
+        font-size:${Math.round(size / 2.1)}px;
+        line-height:1;
+      ">${emoji}</div>
+      ${badge}
     </div>`
-  return L.divIcon({ html, className: '', iconSize: [wrapperWidth, size], iconAnchor: [iconAnchorX, iconAnchorY], popupAnchor: [- (showWeather ? barWidth : 0)/2, -size/2 - 2] })
+
+  const icon = L.divIcon({ html, className: '', iconSize: [size, size], iconAnchor: [size/2, size/2], popupAnchor: [0, -size/2 - 4] })
+  iconCache[cacheKey] = icon
+  return icon
 }
 
 // ─── Transit label pill icon ─────────────────────────────────────
@@ -483,23 +441,15 @@ function FlyToSelected({ selectedFacility, markerRefs }) {
 function PopupCrowdStatus({ facilityId }) {
   const level = seedLevel(facilityId)
   return (
-    <div style={{
-      margin: '8px 0 4px',
-      padding: '8px 10px',
-      borderRadius: '8px',
-      background: level.bg,
-      border: `1px solid ${level.colour}55`,
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: level.colour, letterSpacing: '0.04em' }}>
+    <div className="popup-crowd" style={{ borderColor: `${level.colour}55`, background: level.bg }}>
+      <div className="popup-crowd-row">
+        <span className="popup-crowd-label" style={{ color: level.colour }}>
           {level.label.toUpperCase()}
         </span>
-        <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-          👤 {level.people} nearby
-        </span>
+        <span className="popup-crowd-people">👤 {level.people} nearby</span>
       </div>
-      <div style={{ height: '5px', borderRadius: '99px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${level.pct}%`, borderRadius: '99px', background: level.colour }} />
+      <div className="popup-crowd-track">
+        <div className="popup-crowd-bar" style={{ width: `${level.pct}%`, background: level.colour }} />
       </div>
     </div>
   )
@@ -509,44 +459,39 @@ function FacilityPopupContent({ f, onNavigateTo, user, savedFacilityIds, onSaveT
   const isSaved = savedFacilityIds?.has(f.id)
 
   return (
-    <div className="popup-content" style={{ minWidth: '190px' }}>
+    <div className="popup-content">
       <p className="popup-name">{f.name}</p>
       <p className="popup-type" style={{ color: TYPE_COLOURS[f.type] || '#6366f1' }}>
         {formatType(f.type)}
       </p>
 
-      {/* Ratings - mock data */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', margin: '4px 0 8px 0' }}>
-        <span style={{ fontSize: '12px', color: '#fbbf24' }}>★★★★☆</span>
-        <span style={{ fontSize: '11px', color: '#64748b' }}>4.2 (18)</span>
+      {/* Ratings — mock data */}
+      <div className="popup-rating">
+        <span className="popup-stars">★★★★☆</span>
+        <span className="popup-rating-count">4.2 (18)</span>
       </div>
 
       {/* Community spot tag */}
       {f.is_verified === false && (
-        <p style={{ fontSize: '10px', color: '#f59e0b', fontWeight: 700, marginBottom: 4 }}>★ Community spot</p>
+        <p className="popup-community-tag">★ Community spot</p>
       )}
 
-      {/* Short details */}
+      {/* Address */}
       {f.address && (
-        <p className="popup-address" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {f.address}
-        </p>
+        <p className="popup-address">{f.address}</p>
       )}
 
-      {/* ── Crowd Status ── */}
+      {/* Crowd Status */}
       <PopupCrowdStatus facilityId={f.id} />
 
       {/* Action Buttons */}
-      <div className="popup-actions" style={{ marginTop: '10px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+      <div className="popup-actions">
         {onNavigateTo && (
-          <button className="popup-nav-btn" onClick={() => onNavigateTo(f)} style={{ flex: 1, minWidth: '70px', padding: '6px', margin: 0 }}>
+          <button className="popup-nav-btn" onClick={() => onNavigateTo(f)}>
             🚌 Route
           </button>
         )}
-        <button
-          onClick={() => onShowDetails?.(f)}
-          style={{ background: '#334155', border: 'none', color: '#f8fafc', padding: '6px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', flex: 1, minWidth: '70px', fontWeight: 600, fontFamily: 'inherit' }}
-        >
+        <button className="popup-details-btn" onClick={() => onShowDetails?.(f)}>
           More Details
         </button>
         {user && onSaveToggle && (
@@ -554,7 +499,6 @@ function FacilityPopupContent({ f, onNavigateTo, user, savedFacilityIds, onSaveT
             className={`popup-save-btn${isSaved ? ' saved' : ''}`}
             onClick={() => onSaveToggle(f)}
             title={isSaved ? 'Remove from saved' : 'Save place'}
-            style={{ width: '32px', padding: '6px 0', margin: 0, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             {isSaved ? '❤️' : '🤍'}
           </button>
@@ -576,7 +520,7 @@ function ZoomTracker({ onZoomChange }) {
 }
 
 // ─── Component ───────────────────────────────────────────────────
-export default memo(function FacilityMap({ facilities = [], showWeatherBar = true, showCongestionVisuals = false, userLocation = null, routeInfo = null, onNavigateTo = null, user = null, savedFacilityIds = null, onSaveToggle = null, pinMode = false, pendingPin = null, onMapClick = null, selectedFacility = null, onShowDetails = null }) {
+export default memo(function FacilityMap({ facilities = [], showCongestionVisuals = false, userLocation = null, routeInfo = null, onNavigateTo = null, user = null, savedFacilityIds = null, onSaveToggle = null, pinMode = false, pendingPin = null, onMapClick = null, selectedFacility = null, onShowDetails = null }) {
   const markerRefs = useRef({})
   const [zoomLevel, setZoomLevel] = useState(DEFAULT_ZOOM)
   const showMarkers = zoomLevel >= ICON_ZOOM_THRESHOLD
@@ -610,7 +554,7 @@ export default memo(function FacilityMap({ facilities = [], showWeatherBar = tru
       maxBoundsViscosity={1.0}
       minZoom={13}
       attributionControl={true}
-      zoomControl={true}
+      zoomControl={false}
     >
       {/* OneMap tiles with OSM fallback */}
       <TileLayer
@@ -645,7 +589,7 @@ export default memo(function FacilityMap({ facilities = [], showWeatherBar = tru
         <Marker
           key={f.id}
           position={[f.lat, f.lng]}
-          icon={f.is_verified === false ? getUserIcon(f, showWeatherBar, showCongestionVisuals) : getIcon(f, showWeatherBar, showCongestionVisuals)}
+          icon={f.is_verified === false ? getUserIcon(f, showCongestionVisuals) : getIcon(f, showCongestionVisuals)}
           ref={el => { if (el) markerRefs.current[f.id] = el }}
         >
           <Popup className="facility-popup">
