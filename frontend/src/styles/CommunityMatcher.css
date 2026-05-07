@@ -75,6 +75,29 @@
   font-weight: 600;
 }
 
+.squad-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.create-match-btn {
+  padding: 10px 16px;
+  border: 2px solid var(--primary-color, #1976d2);
+  border-radius: 20px;
+  background: var(--primary-color, #1976d2);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.create-match-btn:hover {
+  background: var(--primary-hover, #1565c0);
+  border-color: var(--primary-hover, #1565c0);
+}
+
 .looking-btn {
   padding: 10px 16px;
   border: 2px solid var(--border-color, #e0e0e0);

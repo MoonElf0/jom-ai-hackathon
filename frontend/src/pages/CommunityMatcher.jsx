@@ -248,6 +248,51 @@ export default function CommunityMatcher() {
     }
   }
 
+  async function createCustomGroupChat(chatName) {
+    if (!user || !chatName.trim()) return null
+
+    try {
+      const { data, error } = await supabase
+        .from('group_chats')
+        .insert([
+          {
+            name: chatName.trim(),
+            member_ids: [user.id],
+            created_by: user.id,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            last_message: `Group created by ${userProfile?.display_name || 'You'}. Invite friends to join!`,
+            last_message_at: new Date().toISOString(),
+          },
+        ])
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error creating custom group chat:', error)
+        return null
+      }
+
+      if (data) {
+        setGroupChats((prev) => [data, ...(prev || [])])
+        setActiveChat(data)
+        setActiveTab('squad')
+      }
+
+      return data
+    } catch (err) {
+      console.error('Error creating custom group chat:', err)
+      return null
+    }
+  }
+
+  const handleCreateCustomMatch = () => {
+    const chatName = prompt('Enter a name for your new match/group:')
+    if (chatName) {
+      createCustomGroupChat(chatName)
+    }
+  }
+
   if (loading) {
     return (
       <div className="community-matcher-container">
@@ -280,12 +325,20 @@ export default function CommunityMatcher() {
         <div className="cm-squad-panel" style={{ display: activeTab === 'squad' ? 'block' : 'none' }}>
           <div className="squad-header">
             <h2>My Squad</h2>
-            <button
-              className={`looking-btn ${userProfile?.looking_for_match ? 'active' : ''}`}
-              onClick={() => toggleLookingForMatch(!userProfile?.looking_for_match)}
-            >
-              {userProfile?.looking_for_match ? '🔴 Looking for Match' : '⚪ Not Looking'}
-            </button>
+            <div className="squad-actions">
+              <button
+                className="create-match-btn"
+                onClick={handleCreateCustomMatch}
+              >
+                ➕ Create New Match
+              </button>
+              <button
+                className={`looking-btn ${userProfile?.looking_for_match ? 'active' : ''}`}
+                onClick={() => toggleLookingForMatch(!userProfile?.looking_for_match)}
+              >
+                {userProfile?.looking_for_match ? '🔴 Looking for Match' : '⚪ Not Looking'}
+              </button>
+            </div>
           </div>
 
           <div className="squad-content">
