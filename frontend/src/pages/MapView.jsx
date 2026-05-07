@@ -140,7 +140,7 @@ function stripNavPrefix(text) {
 // ══════════════════════════════════════════════════════════════════
 // NAVBAR
 // ══════════════════════════════════════════════════════════════════
-const Navbar = memo(function Navbar({ onNavigateProfile, onSignOut }) {
+const Navbar = memo(function Navbar({ onNavigateProfile, onNavigateCommunity, onSignOut }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -168,13 +168,16 @@ const Navbar = memo(function Navbar({ onNavigateProfile, onSignOut }) {
 
         <div className={`dropdown-menu${isMenuOpen ? ' is-open' : ''}`} role="menu" align="center">
           <button className="dropdown-item" onClick={() => setIsMenuOpen(false)} role="menuitem">
-            Map Home
+            🗺️ Map Home
+          </button>
+          <button className="dropdown-item" onClick={() => { setIsMenuOpen(false); onNavigateCommunity?.() }} role="menuitem">
+            🤝 Find a Game
           </button>
           <button className="dropdown-item" onClick={() => setIsMenuOpen(false)} role="menuitem">
-            Saved Areas
+            📍 Saved Areas
           </button>
           <button className="dropdown-item danger" onClick={onSignOut} role="menuitem">
-            Log Out
+            🚪 Log Out
           </button>
         </div>
       </div>
@@ -347,7 +350,6 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
   const [showAdvanced, setShowAdvanced] = useState(false)
   
   // Visual Toggles
-  const [showWeatherBar, setShowWeatherBar] = useState(true)
   const [showCongestionVisuals, setShowCongestionVisuals] = useState(false)
 
   const filterRef = useRef(null)
@@ -396,148 +398,112 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
 
   return (
     <div className="map-area">
-      <div style={{ position: 'absolute', top: '16px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: 'calc(100% - 32px)', maxWidth: '520px', display: 'flex', gap: '8px' }}>
-        <div style={{ flex: 1 }}>
-          <SearchBar facilities={filteredFacilities} onSelectFacility={onSelectFacility} />
-        </div>
-        
-        {/* Filter Button & Dropdown */}
-        <div ref={filterRef} style={{ position: 'relative' }}>
-          <button
-            onClick={() => setShowFilter(!showFilter)}
-            style={{
-              height: '100%',
-              padding: '0 14px',
-              background: isFilterActive ? '#6366f1' : '#1e2130',
-              border: '1px solid ' + (isFilterActive ? '#6366f1' : '#2a2d3a'),
-              borderRadius: '12px',
-              color: '#fff',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s',
-            }}
-            title="Filter facilities"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            {activeCount > 0 && (
-              <span style={{ marginLeft: '6px', fontSize: '12px', fontWeight: 'bold' }}>{activeCount}</span>
-            )}
-          </button>
+      {/* ── Top bar: search shrinks while pin pill scales in ── */}
+      <div className="map-topbar">
+        {/* Search row — always in DOM, animates out when pin mode */}
+        <div className={`topbar-searchrow${pinMode ? ' topbar-searchrow--hidden' : ''}`}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <SearchBar facilities={filteredFacilities} onSelectFacility={onSelectFacility} />
+          </div>
 
-          {showFilter && (
-            <div style={{
-              position: 'absolute', top: '100%', right: 0, marginTop: '8px',
-              background: '#1e2130', border: '1px solid #2a2d3a', borderRadius: '12px',
-              width: '260px', maxHeight: '450px', overflowY: 'auto',
-              boxShadow: '0 12px 40px rgba(0,0,0,0.5)', zIndex: 2001,
-              display: 'flex', flexDirection: 'column'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid #2a2d3a', position: 'sticky', top: 0, background: '#1e2130', zIndex: 2 }}>
-                <span style={{ fontSize: '13px', fontWeight: 600, color: '#e2e8f0' }}>Filters</span>
-                {isFilterActive && (
-                  <button onClick={clearFilters} style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: '12px', cursor: 'pointer', fontWeight: 500 }}>
-                    Clear
-                  </button>
-                )}
-              </div>
+          {/* Filter Button & Dropdown */}
+          <div ref={filterRef} style={{ position: 'relative', flexShrink: 0 }}>
+              <button
+                className={`filter-btn${isFilterActive ? ' active' : ''}`}
+                onClick={() => setShowFilter(!showFilter)}
+                title="Filter facilities"
+                aria-label="Filter facilities"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                </svg>
+                {activeCount > 0 && <span className="filter-badge">{activeCount}</span>}
+              </button>
 
-              {/* Basic Filtering (Sports) */}
-              <div style={{ borderBottom: '1px solid #2a2d3a' }}>
-                <button 
-                  onClick={() => setShowBasic(!showBasic)}
-                  style={{ width: '100%', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', background: 'transparent', border: 'none', color: '#e2e8f0', fontSize: '13px', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
-                >
-                  Basic (Sports)
-                  <span>{showBasic ? '▲' : '▼'}</span>
-                </button>
-                {showBasic && (
-                  <div style={{ padding: '0 0 8px 0' }}>
-                    {SPOT_TYPE_OPTIONS.map(opt => (
-                      <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 14px', cursor: 'pointer', transition: 'background 0.1s' }} onMouseEnter={e => e.currentTarget.style.background = '#252839'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                        <input type="checkbox" checked={selectedTypes.includes(opt.value)} onChange={() => toggleFilter(opt.value)} style={{ cursor: 'pointer', accentColor: '#6366f1' }} />
-                        <span style={{ fontSize: '13px', color: '#94a3b8' }}>{opt.label}</span>
-                      </label>
-                    ))}
+              {showFilter && (
+                <div className="filter-dropdown">
+                  <div className="filter-dropdown-header">
+                    <span className="filter-dropdown-title">Filters</span>
+                    {isFilterActive && (
+                      <button className="filter-clear-btn" onClick={clearFilters}>Clear</button>
+                    )}
                   </div>
-                )}
-              </div>
 
-              {/* Advanced Filtering (Weather & Congestion) */}
-              <div>
-                <button 
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                  style={{ width: '100%', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', background: 'transparent', border: 'none', color: '#e2e8f0', fontSize: '13px', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
-                >
-                  Advanced (Live Status)
-                  <span>{showAdvanced ? '▲' : '▼'}</span>
-                </button>
-                {showAdvanced && (
-                  <div style={{ padding: '4px 14px 14px' }}>
-                    {/* Map Visuals Toggles (Always Visible) */}
-                    <div style={{ marginBottom: '16px' }}>
-                      <p style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Map Visuals</p>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={showCongestionVisuals} 
-                            onChange={() => setShowCongestionVisuals(!showCongestionVisuals)} 
-                            style={{ accentColor: '#f97316', cursor: 'pointer' }} 
-                          />
-                          <span style={{ fontSize: '13px', color: '#e2e8f0' }}>Emphasize Congestion (Size/Colour)</span>
-                        </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={showWeatherBar} 
-                            onChange={() => setShowWeatherBar(!showWeatherBar)} 
-                            style={{ accentColor: '#38bdf8', cursor: 'pointer' }} 
-                          />
-                          <span style={{ fontSize: '13px', color: '#e2e8f0' }}>Show Weather Bar</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Congestion Options (Only visible if visual is on) */}
-                    {showCongestionVisuals && (
-                      <div style={{ marginBottom: '16px', paddingTop: '16px', borderTop: '1px solid #2a2d3a' }}>
-                        <p style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Filter by Congestion Level</p>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {CROWD_LEVELS.map(level => {
-                            const active = selectedCrowds.includes(level.label)
-                            return (
-                              <button
-                                key={level.label}
-                                onClick={() => toggleCrowd(level.label)}
-                                style={{
-                                  padding: '4px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, cursor: 'pointer',
-                                  background: active ? `${level.colour}33` : '#0f172a',
-                                  color: active ? level.colour : '#94a3b8',
-                                  border: `1px solid ${active ? level.colour : '#334155'}`
-                                }}
-                              >
-                                {level.label}
-                              </button>
-                            )
-                          })}
-                        </div>
+                  {/* Basic Filtering */}
+                  <div className="filter-section">
+                    <button className="filter-section-toggle" onClick={() => setShowBasic(!showBasic)}>
+                      <span>Basic (Sports)</span>
+                      <span className="filter-chevron">{showBasic ? '▲' : '▼'}</span>
+                    </button>
+                    {showBasic && (
+                      <div className="filter-section-body">
+                        {SPOT_TYPE_OPTIONS.map(opt => (
+                          <label key={opt.value} className="filter-check-label">
+                            <input type="checkbox" checked={selectedTypes.includes(opt.value)} onChange={() => toggleFilter(opt.value)} style={{ accentColor: '#6366f1' }} />
+                            <span className="filter-check-text">{opt.label}</span>
+                          </label>
+                        ))}
                       </div>
                     )}
-
-
-
                   </div>
-                )}
-              </div>
 
+                  {/* Advanced Filtering */}
+                  <div className="filter-section">
+                    <button className="filter-section-toggle" onClick={() => setShowAdvanced(!showAdvanced)}>
+                      <span>Advanced (Live Status)</span>
+                      <span className="filter-chevron">{showAdvanced ? '▲' : '▼'}</span>
+                    </button>
+                    {showAdvanced && (
+                      <div className="filter-section-body" style={{ padding: '4px 14px 14px' }}>
+                        <p className="filter-sublabel">Map Visuals</p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+                          <label className="filter-check-label">
+                            <input type="checkbox" checked={showCongestionVisuals} onChange={() => setShowCongestionVisuals(!showCongestionVisuals)} style={{ accentColor: '#f97316' }} />
+                            <span className="filter-check-text">Emphasize Congestion (Size/Ring)</span>
+                          </label>
+                        </div>
+                        {showCongestionVisuals && (
+                          <div className="filter-crowd-section">
+                            <p className="filter-sublabel">Filter by Congestion Level</p>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {CROWD_LEVELS.map(level => {
+                                const active = selectedCrowds.includes(level.label)
+                                return (
+                                  <button
+                                    key={level.label}
+                                    className={`filter-crowd-btn${active ? ' active' : ''}`}
+                                    onClick={() => toggleCrowd(level.label)}
+                                    style={active ? { background: `${level.colour}22`, color: level.colour, borderColor: level.colour } : {}}
+                                  >
+                                    {level.label}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
         </div>
+
+        {/* Pin-mode pill — compact, centered, scales in over the shrinking search bar */}
+        {pinMode && (
+          <div className="pin-mode-pill">
+            <span className="pin-mode-pill-dot">📍</span>
+            <span className="pin-mode-pill-text">Tap anywhere on the map to place your spot</span>
+            <button className="pin-mode-pill-cancel" onClick={onTogglePinMode} aria-label="Cancel pin mode">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M18 6 6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
+
       {loading && (
         <div className="map-loading" aria-live="polite">
           <div className="map-loading-spinner" />
@@ -552,27 +518,28 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
           </div>
         </div>
       )}
-      {/* Pin mode banner */}
-      {pinMode && (
-        <div className="pin-mode-banner">
-          📍 Tap anywhere on the map to place your spot
-        </div>
-      )}
 
-      {/* Add Spot FAB */}
+      {/* Add Spot FAB — SVG icons so both states center perfectly */}
       <button
         className={`map-fab${pinMode ? ' active' : ''}`}
         onClick={onTogglePinMode}
         aria-label={pinMode ? 'Cancel adding spot' : 'Add new spot'}
         title={pinMode ? 'Cancel' : 'Add a new spot'}
       >
-        {pinMode ? '✕' : '+'}
+        {pinMode ? (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M18 6 6 18M6 6l12 12"/>
+          </svg>
+        ) : (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M12 4v16m8-8H4"/>
+          </svg>
+        )}
       </button>
 
       <Suspense fallback={null}>
         <FacilityMap
           facilities={filteredFacilities}
-          showWeatherBar={showWeatherBar}
           showCongestionVisuals={showCongestionVisuals}
           routeInfo={routeInfo}
           userLocation={userLocation}
@@ -1387,7 +1354,11 @@ export default function MapView() {
 
   return (
     <div className="map-page" style={{ position: 'relative' }}>
-      <Navbar onNavigateProfile={() => navigate('/profile')} onSignOut={handleSignOut} />
+      <Navbar
+        onNavigateProfile={() => navigate('/profile')}
+        onNavigateCommunity={() => navigate('/community')}
+        onSignOut={handleSignOut}
+      />
       <MapArea
         facilities={tampinesFacilities}
         loading={loading}
