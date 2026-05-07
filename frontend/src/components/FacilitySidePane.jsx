@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import '../index.css' // Or wherever the styles are, we will add them to index.css
 
 const TYPE_COLOURS = {
@@ -13,6 +14,7 @@ function formatType(t) {
 }
 
 export default function FacilitySidePane({ facility, onClose, onNavigateTo, user, isSaved, onSaveToggle }) {
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('overview')
 
   if (!facility) return null
@@ -52,6 +54,10 @@ export default function FacilitySidePane({ facility, onClose, onNavigateTo, user
           <button className="side-pane-action-btn" onClick={() => onSaveToggle?.(facility)}>
             <div className="side-pane-action-icon" style={{ background: isSaved ? '#f43f5e' : '#334155' }}>{isSaved ? '❤️' : '🤍'}</div>
             <span>Save</span>
+          </button>
+          <button className="side-pane-action-btn" onClick={() => { navigate('/facility-hub', { state: { facility } }); onClose(); }}>
+            <div className="side-pane-action-icon" style={{ background: '#f97316' }}>🏟️</div>
+            <span>Facility Hub</span>
           </button>
           <button className="side-pane-action-btn">
             <div className="side-pane-action-icon" style={{ background: '#334155' }}>📱</div>
