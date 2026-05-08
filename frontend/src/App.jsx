@@ -8,6 +8,9 @@ import MapView          from './pages/MapView'
 import AuthPage         from './pages/AuthPage'
 import ProfilePage      from './pages/ProfilePage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
+import FriendsPage      from './pages/FriendsPage'
+import ChatListPage     from './pages/ChatListPage'
+import ChatRoomPage     from './pages/ChatRoomPage'
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth()
@@ -32,6 +35,9 @@ export default function App() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/map"            element={<RequireAuth><MapView /></RequireAuth>} />
         <Route path="/profile"        element={<RequireAuth><ProfilePage /></RequireAuth>} />
+        <Route path="/friends"        element={<RequireAuth><FriendsPage /></RequireAuth>} />
+        <Route path="/chats"          element={<RequireAuth><ChatListPage /></RequireAuth>} />
+        <Route path="/chat/:chatId"   element={<RequireAuth><ChatRoomPage /></RequireAuth>} />
       </Routes>
     </BrowserRouter>
   )

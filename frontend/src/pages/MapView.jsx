@@ -1,7 +1,7 @@
 // src/pages/MapView.jsx
 
 import { useEffect, useState, useRef, memo, lazy, Suspense, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../utils/useAuth'
 import { isInTampines } from '../utils/tampinesBoundary'
@@ -154,7 +154,7 @@ function stripNavPrefix(text) {
 // ══════════════════════════════════════════════════════════════════
 // NAVBAR
 // ══════════════════════════════════════════════════════════════════
-const Navbar = memo(function Navbar({ onNavigateProfile, onNavigateCommunity, onNavigateSaved, onSignOut }) {
+const Navbar = memo(function Navbar({ onNavigateProfile, onNavigateFriends, onNavigateChats, onNavigateSaved, onSignOut }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -184,8 +184,11 @@ const Navbar = memo(function Navbar({ onNavigateProfile, onNavigateCommunity, on
           <button className="dropdown-item" onClick={() => setIsMenuOpen(false)} role="menuitem">
             🗺️ Map Home
           </button>
-          <button className="dropdown-item" onClick={() => { setIsMenuOpen(false); onNavigateCommunity?.() }} role="menuitem">
-            🤝 Find a Game
+          <button className="dropdown-item" onClick={() => { setIsMenuOpen(false); onNavigateFriends?.() }} role="menuitem">
+            🤝 Friends
+          </button>
+          <button className="dropdown-item" onClick={() => { setIsMenuOpen(false); onNavigateChats?.() }} role="menuitem">
+            💬 Chats
           </button>
           <button className="dropdown-item" onClick={() => { setIsMenuOpen(false); onNavigateSaved?.() }} role="menuitem">
             ❤️ Saved Places
@@ -1237,8 +1240,9 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady, defaultNavMode = 'pt',
 // MAP VIEW
 // ══════════════════════════════════════════════════════════════════
 export default function MapView() {
-  const navigate     = useNavigate()
-  const { user }     = useAuth()
+  const navigate              = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { user }              = useAuth()
 
   const [facilities,       setFacilities]       = useState([])
   const [loading,          setLoading]          = useState(true)
@@ -1432,6 +1436,21 @@ export default function MapView() {
     }
   }, [onRouteReady])
 
+  // Honour ?goto=lat,lng&name=...  (used when tapping a shared-location chat bubble)
+  useEffect(() => {
+    const goto = searchParams.get('goto')
+    if (!goto) return
+    const [lat, lng] = goto.split(',').map(Number)
+    const name = searchParams.get('name') || 'Shared location'
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      routeFromUserTo({ lat, lng, name })
+    }
+    // Clear the param so it doesn't re-trigger
+    const next = new URLSearchParams(searchParams)
+    next.delete('goto'); next.delete('name')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams, routeFromUserTo])
+
   useEffect(() => {
     let cancelled = false
     async function load() {
@@ -1463,7 +1482,8 @@ export default function MapView() {
     <div className="map-page" style={{ position: 'relative' }}>
       <Navbar
         onNavigateProfile={() => navigate('/profile')}
-        onNavigateCommunity={() => navigate('/community')}
+        onNavigateFriends={() => navigate('/friends')}
+        onNavigateChats={() => navigate('/chats')}
         onNavigateSaved={() => setShowSavedPanel(true)}
         onSignOut={handleSignOut}
       />

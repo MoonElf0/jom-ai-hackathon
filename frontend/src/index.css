@@ -280,10 +280,12 @@ input {
     color var(--transition-fast);
 }
 
-.dropdown-menu.is-open .dropdown-item:nth-child(1) { opacity: 1; transform: none; transition-delay:  60ms; }
-.dropdown-menu.is-open .dropdown-item:nth-child(2) { opacity: 1; transform: none; transition-delay: 100ms; }
-.dropdown-menu.is-open .dropdown-item:nth-child(3) { opacity: 1; transform: none; transition-delay: 140ms; }
-.dropdown-menu.is-open .dropdown-item:nth-child(4) { opacity: 1; transform: none; transition-delay: 180ms; }
+.dropdown-menu.is-open .dropdown-item:nth-child(1) { opacity: 1; transform: none; transition-delay:  50ms; }
+.dropdown-menu.is-open .dropdown-item:nth-child(2) { opacity: 1; transform: none; transition-delay:  85ms; }
+.dropdown-menu.is-open .dropdown-item:nth-child(3) { opacity: 1; transform: none; transition-delay: 120ms; }
+.dropdown-menu.is-open .dropdown-item:nth-child(4) { opacity: 1; transform: none; transition-delay: 155ms; }
+.dropdown-menu.is-open .dropdown-item:nth-child(5) { opacity: 1; transform: none; transition-delay: 190ms; }
+.dropdown-menu.is-open .dropdown-item:nth-child(6) { opacity: 1; transform: none; transition-delay: 225ms; }
 
 /* ── Map Area ──────────────────────────────────────────────── */
 .map-area {
