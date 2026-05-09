@@ -2,6 +2,7 @@
 // which makes interactions feel ~1s slow. Add it back for production audits only.
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './styles/social.css'
 import App from './App.jsx'
 
 createRoot(document.getElementById('root')).render(<App />)

@@ -1,16 +1,30 @@
 // src/pages/MapView.jsx
 
 import { useEffect, useState, useRef, memo, lazy, Suspense, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../utils/useAuth'
 import { isInTampines } from '../utils/tampinesBoundary'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 
-const FacilityMap   = lazy(() => import('../components/FacilityMap'))
-const FacilityHub   = lazy(() => import('../components/FacilityHub'))
+const FacilityMap = lazy(() => import('../components/FacilityMap'))
 import SearchBar from '../components/SearchBar'
+import FacilitySidePane from '../components/FacilitySidePane'
+
+// ── Facility type colours (for saved panel dots) ─────────────────
+const TYPE_COLOURS_MAP = {
+  fitness_corner: '#22d3ee', playground: '#4ade80', basketball_court: '#f97316',
+  badminton_court: '#a78bfa', tennis_court: '#fbbf24', swimming_pool: '#38bdf8',
+  multi_purpose_court: '#f472b6', gym: '#fb923c', jogging_track: '#86efac',
+  sheltered_pavilion: '#94a3b8', volleyball_court: '#34d399', football_field: '#10b981',
+  futsal_court: '#059669', cycling_path: '#60a5fa', community_hall: '#c084fc',
+  park: '#4ade80', skate_park: '#f87171',
+}
+
+function fmtType(t) {
+  return (t || '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+}
 
 // ── Travel mode metadata ──────────────────────────────────────────
 const MODE_ICONS  = { walk: '🚶', drive: '🚗', cycle: '🚲', pt: '🚌' }
@@ -140,7 +154,7 @@ function stripNavPrefix(text) {
 // ══════════════════════════════════════════════════════════════════
 // NAVBAR
 // ══════════════════════════════════════════════════════════════════
-const Navbar = memo(function Navbar({ onNavigateProfile, onSignOut }) {
+const Navbar = memo(function Navbar({ onNavigateProfile, onNavigateFriends, onNavigateChats, onNavigateSaved, onSignOut }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -168,13 +182,19 @@ const Navbar = memo(function Navbar({ onNavigateProfile, onSignOut }) {
 
         <div className={`dropdown-menu${isMenuOpen ? ' is-open' : ''}`} role="menu" align="center">
           <button className="dropdown-item" onClick={() => setIsMenuOpen(false)} role="menuitem">
-            Map Home
+            🗺️ Map Home
           </button>
-          <button className="dropdown-item" onClick={() => setIsMenuOpen(false)} role="menuitem">
-            Saved Areas
+          <button className="dropdown-item" onClick={() => { setIsMenuOpen(false); onNavigateFriends?.() }} role="menuitem">
+            🤝 Friends
+          </button>
+          <button className="dropdown-item" onClick={() => { setIsMenuOpen(false); onNavigateChats?.() }} role="menuitem">
+            💬 Chats
+          </button>
+          <button className="dropdown-item" onClick={() => { setIsMenuOpen(false); onNavigateSaved?.() }} role="menuitem">
+            ❤️ Saved Places
           </button>
           <button className="dropdown-item danger" onClick={onSignOut} role="menuitem">
-            Log Out
+            🚪 Log Out
           </button>
         </div>
       </div>
@@ -308,27 +328,291 @@ const RoutePanel = memo(function RoutePanel({ routeInfo, onClear }) {
 })
 
 // ══════════════════════════════════════════════════════════════════
+// SAVED PANEL
+// ══════════════════════════════════════════════════════════════════
+function SavedPanel({ facilities, savedFacilityIds, onClose, onNavigateTo, onShowDetails }) {
+  const saved = facilities.filter(f => savedFacilityIds?.has(f.id))
+
+  return (
+    <>
+      <div className="saved-panel-overlay" onClick={onClose} />
+      <div className="saved-panel" role="dialog" aria-label="Saved places">
+        <div className="saved-panel-header">
+          <h2 className="saved-panel-title">❤️ Saved Places</h2>
+          <button className="saved-panel-close" onClick={onClose} aria-label="Close saved panel">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6 6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div className="saved-panel-list">
+          {saved.length === 0 ? (
+            <div className="saved-panel-empty">
+              <p className="saved-panel-empty-icon">🤍</p>
+              <p className="saved-panel-empty-text">No saved places yet.</p>
+              <p className="saved-panel-empty-text" style={{ marginTop: 6, fontSize: 12 }}>
+                Tap ❤️ on any facility to save it here.
+              </p>
+            </div>
+          ) : saved.map(f => (
+            <div key={f.id} className="saved-panel-item">
+              <span className="saved-panel-dot" style={{ background: TYPE_COLOURS_MAP[f.type] || '#6366f1' }} />
+              <div className="saved-panel-info">
+                <p className="saved-panel-name">{f.name}</p>
+                <p className="saved-panel-type">{fmtType(f.type)}</p>
+              </div>
+              <div className="saved-panel-actions">
+                <button
+                  className="saved-panel-btn"
+                  title="Get directions"
+                  onClick={() => { onNavigateTo?.(f); onClose() }}
+                >🚌</button>
+                <button
+                  className="saved-panel-btn"
+                  title="View details"
+                  onClick={() => { onShowDetails?.(f); onClose() }}
+                >ℹ️</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── Opening hours (mirrors FacilitySidePane logic) ────────────────
+const _FACILITY_HOURS = {
+  basketball_court:    { open: '07:00', close: '22:00' },
+  badminton_court:     { open: '07:00', close: '22:00' },
+  tennis_court:        { open: '07:00', close: '22:00' },
+  volleyball_court:    { open: '07:00', close: '22:00' },
+  football_field:      { open: '07:00', close: '22:00' },
+  futsal_court:        { open: '07:00', close: '22:00' },
+  multi_purpose_court: { open: '07:00', close: '22:00' },
+  swimming_pool:       { open: '06:30', close: '21:30' },
+  gym:                 { open: '07:00', close: '22:00' },
+  community_hall:      { open: '08:00', close: '22:00' },
+  playground:          { open: '07:00', close: '22:00' },
+  skate_park:          { open: '07:00', close: '22:00' },
+  // null = 24 h
+  fitness_corner: null, jogging_track: null, cycling_path: null,
+  park: null, sheltered_pavilion: null,
+}
+
+function isFacilityOpen(type) {
+  const h = _FACILITY_HOURS[type]
+  if (!h) return true  // 24-hour facilities always open
+  const now   = new Date()
+  const sgMin = (now.getUTCHours() * 60 + now.getUTCMinutes() + 8 * 60) % (24 * 60)
+  const [oh, om] = h.open.split(':').map(Number)
+  const [ch, cm] = h.close.split(':').map(Number)
+  return sgMin >= oh * 60 + om && sgMin < ch * 60 + cm
+}
+
+// ── Mock data helpers for advanced filtering ──────────────────────
+const CROWD_LEVELS = [
+  { label: 'Empty',    pct: 5,  colour: '#10b981', bg: 'rgba(16,185,129,0.15)', people: 0  },
+  { label: 'Quiet',   pct: 25, colour: '#34d399', bg: 'rgba(52,211,153,0.15)', people: 2  },
+  { label: 'Moderate',pct: 55, colour: '#fbbf24', bg: 'rgba(251,191,36,0.15)', people: 7  },
+  { label: 'Busy',    pct: 80, colour: '#f97316', bg: 'rgba(249,115,22,0.15)', people: 14 },
+  { label: 'Full',    pct: 98, colour: '#ef4444', bg: 'rgba(239,68,68,0.15)',  people: 20 },
+]
+
+function seedLevel(id) {
+  let h = 0
+  for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) & 0xffff
+  return CROWD_LEVELS[h % CROWD_LEVELS.length]
+}
+
+
+// ══════════════════════════════════════════════════════════════════
 // MAP AREA
 // ══════════════════════════════════════════════════════════════════
-const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, userLocation, onClearRoute, onNavigateTo, user, savedFacilityIds, onSaveToggle, pinMode, pendingPin, onTogglePinMode, onMapClick, selectedFacility, onSelectFacility, onFacilitySelect }) {
+const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, userLocation, onClearRoute, onNavigateTo, user, savedFacilityIds, onSaveToggle, pinMode, pendingPin, onTogglePinMode, onMapClick, selectedFacility, onSelectFacility, onShowDetails }) {
+  const [selectedTypes,    setSelectedTypes]    = useState([])
+  const [selectedCrowds,   setSelectedCrowds]   = useState([])
+  const [openFilter,       setOpenFilter]       = useState(null)  // null | 'open' | 'closed'
+  const [showFilter,       setShowFilter]       = useState(false)
+  const [showBasic,        setShowBasic]        = useState(true)
+  const [showAvailability, setShowAvailability] = useState(true)
+  const [showCongestion,   setShowCongestion]   = useState(true)
+
+  const filterRef = useRef(null)
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (filterRef.current && !filterRef.current.contains(e.target)) {
+        setShowFilter(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const filteredFacilities = useMemo(() => {
+    return facilities.filter(f => {
+      if (selectedTypes.length > 0 && !selectedTypes.includes(f.type)) return false
+      if (selectedCrowds.length > 0) {
+        const crowd = seedLevel(f.id)
+        if (!selectedCrowds.includes(crowd.label)) return false
+      }
+      if (openFilter === 'open'   && !isFacilityOpen(f.type)) return false
+      if (openFilter === 'closed' &&  isFacilityOpen(f.type)) return false
+      return true
+    })
+  }, [facilities, selectedTypes, selectedCrowds, openFilter])
+
+  function toggleFilter(type) {
+    setSelectedTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type])
+  }
+
+  function toggleCrowd(label) {
+    setSelectedCrowds(prev => prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label])
+  }
+
+  function clearFilters() {
+    setSelectedTypes([])
+    setSelectedCrowds([])
+    setOpenFilter(null)
+  }
+
+  const isFilterActive = selectedTypes.length > 0 || selectedCrowds.length > 0 || openFilter !== null
+  const activeCount    = selectedTypes.length + selectedCrowds.length + (openFilter ? 1 : 0)
+
   return (
     <div className="map-area">
-      {/* Search bar slot — shrinks to a pill when pin mode is active */}
-      <div style={{ position: 'absolute', top: '16px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: 'calc(100% - 32px)', maxWidth: '520px', display: 'flex', justifyContent: 'center' }}>
-        {pinMode ? (
+      {/* ── Top bar: search shrinks while pin pill scales in ── */}
+      <div className="map-topbar">
+        {/* Search row — always in DOM, animates out when pin mode */}
+        <div className={`topbar-searchrow${pinMode ? ' topbar-searchrow--hidden' : ''}`}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <SearchBar facilities={filteredFacilities} onSelectFacility={onSelectFacility} />
+          </div>
+
+          {/* Filter Button & Dropdown */}
+          <div ref={filterRef} style={{ position: 'relative', flexShrink: 0 }}>
+              <button
+                className={`filter-btn${isFilterActive ? ' active' : ''}`}
+                onClick={() => setShowFilter(!showFilter)}
+                title="Filter facilities"
+                aria-label="Filter facilities"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                </svg>
+                {activeCount > 0 && <span className="filter-badge">{activeCount}</span>}
+              </button>
+
+              {showFilter && (
+                <div className="filter-dropdown">
+                  <div className="filter-dropdown-header">
+                    <span className="filter-dropdown-title">Filters</span>
+                    {isFilterActive && (
+                      <button className="filter-clear-btn" onClick={clearFilters}>Clear</button>
+                    )}
+                  </div>
+
+                  {/* Basic Filtering */}
+                  <div className="filter-section">
+                    <button className="filter-section-toggle" onClick={() => setShowBasic(!showBasic)}>
+                      <span>Basic (Sports)</span>
+                      <span className="filter-chevron">{showBasic ? '▲' : '▼'}</span>
+                    </button>
+                    {showBasic && (
+                      <div className="filter-section-body">
+                        {SPOT_TYPE_OPTIONS.map(opt => (
+                          <label key={opt.value} className="filter-check-label">
+                            <input type="checkbox" checked={selectedTypes.includes(opt.value)} onChange={() => toggleFilter(opt.value)} style={{ accentColor: '#6366f1' }} />
+                            <span className="filter-check-text">{opt.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Availability */}
+                  <div className="filter-section">
+                    <button className="filter-section-toggle" onClick={() => setShowAvailability(!showAvailability)}>
+                      <span>Availability</span>
+                      <span className="filter-chevron">{showAvailability ? '▲' : '▼'}</span>
+                    </button>
+                    {showAvailability && (
+                      <div className="filter-section-body" style={{ padding: '8px 14px 14px' }}>
+                        <p className="filter-sublabel" style={{ marginBottom: 8 }}>Show only facilities that are…</p>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          {[
+                            { value: 'open',   label: '🟢 Open Now',  colour: '#10b981' },
+                            { value: 'closed', label: '🔴 Closed',    colour: '#ef4444' },
+                          ].map(opt => {
+                            const active = openFilter === opt.value
+                            return (
+                              <button
+                                key={opt.value}
+                                className={`filter-crowd-btn${active ? ' active' : ''}`}
+                                onClick={() => setOpenFilter(active ? null : opt.value)}
+                                style={active ? { background: `${opt.colour}22`, color: opt.colour, borderColor: opt.colour } : {}}
+                              >
+                                {opt.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {openFilter && (
+                          <p className="filter-sublabel" style={{ marginTop: 8, fontSize: 10 }}>
+                            Based on standard Singapore public facility hours
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Congestion Level */}
+                  <div className="filter-section">
+                    <button className="filter-section-toggle" onClick={() => setShowCongestion(!showCongestion)}>
+                      <span>Congestion Level</span>
+                      <span className="filter-chevron">{showCongestion ? '▲' : '▼'}</span>
+                    </button>
+                    {showCongestion && (
+                      <div className="filter-section-body" style={{ padding: '8px 14px 14px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {CROWD_LEVELS.map(level => {
+                            const active = selectedCrowds.includes(level.label)
+                            return (
+                              <button
+                                key={level.label}
+                                className={`filter-crowd-btn${active ? ' active' : ''}`}
+                                onClick={() => toggleCrowd(level.label)}
+                                style={active ? { background: `${level.colour}22`, color: level.colour, borderColor: level.colour } : {}}
+                              >
+                                {level.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+        </div>
+
+        {/* Pin-mode pill — compact, centered, scales in over the shrinking search bar */}
+        {pinMode && (
           <div className="pin-mode-pill">
-            <span>📍</span>
-            <span>Tap anywhere on the map to place your spot</span>
-            <button className="pin-mode-pill-cancel" onClick={onTogglePinMode} aria-label="Cancel">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/>
+            <span className="pin-mode-pill-dot">📍</span>
+            <span className="pin-mode-pill-text">Tap anywhere on the map to place your spot</span>
+            <button className="pin-mode-pill-cancel" onClick={onTogglePinMode} aria-label="Cancel pin mode">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M18 6 6 18M6 6l12 12"/>
               </svg>
             </button>
           </div>
-        ) : (
-          <SearchBar facilities={facilities} onSelectFacility={onSelectFacility} />
         )}
       </div>
+
       {loading && (
         <div className="map-loading" aria-live="polite">
           <div className="map-loading-spinner" />
@@ -344,7 +628,7 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
         </div>
       )}
 
-      {/* Add Spot FAB — SVG icons so + and ✕ always center identically */}
+      {/* Add Spot FAB — SVG icons so both states center perfectly */}
       <button
         className={`map-fab${pinMode ? ' active' : ''}`}
         onClick={onTogglePinMode}
@@ -352,19 +636,20 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
         title={pinMode ? 'Cancel' : 'Add a new spot'}
       >
         {pinMode ? (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M18 6 6 18M6 6l12 12"/>
           </svg>
         ) : (
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M12 4v16m8-8H4"/>
           </svg>
         )}
       </button>
 
       <Suspense fallback={null}>
         <FacilityMap
-          facilities={facilities}
+          facilities={filteredFacilities}
+          showCongestionVisuals={true}
           routeInfo={routeInfo}
           userLocation={userLocation}
           selectedFacility={selectedFacility}
@@ -375,7 +660,7 @@ const MapArea = memo(function MapArea({ facilities, loading, error, routeInfo, u
           pinMode={pinMode}
           pendingPin={pendingPin}
           onMapClick={onMapClick}
-          onFacilitySelect={onFacilitySelect}
+          onShowDetails={onShowDetails}
         />
       </Suspense>
       <RoutePanel routeInfo={routeInfo} onClear={onClearRoute} />
@@ -414,7 +699,6 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady, defaultNavMode = 'pt',
 
   // Sync preferred transport when user profile loads
   useEffect(() => { setNavMode(defaultNavMode) }, [defaultNavMode])
-
 
   // ── Poll GPS every 30 s ──────────────────────────────────────────
   useEffect(() => {
@@ -956,8 +1240,9 @@ const ChatSheet = memo(function ChatSheet({ onRouteReady, defaultNavMode = 'pt',
 // MAP VIEW
 // ══════════════════════════════════════════════════════════════════
 export default function MapView() {
-  const navigate     = useNavigate()
-  const { user }     = useAuth()
+  const navigate              = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { user }              = useAuth()
 
   const [facilities,       setFacilities]       = useState([])
   const [loading,          setLoading]          = useState(true)
@@ -972,8 +1257,9 @@ export default function MapView() {
   const [pendingPin,   setPendingPin]   = useState(null)
   const [showAddForm,  setShowAddForm]  = useState(false)
   const [addForm,      setAddForm]      = useState({ name: '', type: 'basketball_court', address: '', isSheltered: false, isIndoor: false })
-  const [addingSpot,   setAddingSpot]   = useState(false)
-  const [addSpotError, setAddSpotError] = useState(null)
+  const [addingSpot,      setAddingSpot]      = useState(false)
+  const [addSpotError,    setAddSpotError]    = useState(null)
+  const [showSavedPanel,  setShowSavedPanel]  = useState(false)
 
   // Filter to only facilities actually inside the Tampines boundary polygon
   const tampinesFacilities = useMemo(
@@ -1150,6 +1436,21 @@ export default function MapView() {
     }
   }, [onRouteReady])
 
+  // Honour ?goto=lat,lng&name=...  (used when tapping a shared-location chat bubble)
+  useEffect(() => {
+    const goto = searchParams.get('goto')
+    if (!goto) return
+    const [lat, lng] = goto.split(',').map(Number)
+    const name = searchParams.get('name') || 'Shared location'
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      routeFromUserTo({ lat, lng, name })
+    }
+    // Clear the param so it doesn't re-trigger
+    const next = new URLSearchParams(searchParams)
+    next.delete('goto'); next.delete('name')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams, routeFromUserTo])
+
   useEffect(() => {
     let cancelled = false
     async function load() {
@@ -1157,7 +1458,7 @@ export default function MapView() {
       try {
         const { data, error } = await supabase
           .from('facilities')
-          .select('id, name, type, lat, lng, address, is_sheltered, is_indoor, is_verified')
+          .select('id, name, type, lat, lng, address, is_sheltered, is_indoor')
           .order('name')
         if (error) throw error
         if (!cancelled) setFacilities(data || [])
@@ -1179,7 +1480,13 @@ export default function MapView() {
 
   return (
     <div className="map-page" style={{ position: 'relative' }}>
-      <Navbar onNavigateProfile={() => navigate('/profile')} onSignOut={handleSignOut} />
+      <Navbar
+        onNavigateProfile={() => navigate('/profile')}
+        onNavigateFriends={() => navigate('/friends')}
+        onNavigateChats={() => navigate('/chats')}
+        onNavigateSaved={() => setShowSavedPanel(true)}
+        onSignOut={handleSignOut}
+      />
       <MapArea
         facilities={tampinesFacilities}
         loading={loading}
@@ -1197,23 +1504,31 @@ export default function MapView() {
         onMapClick={handleMapClick}
         selectedFacility={selectedFacility}
         onSelectFacility={setSelectedFacility}
-        onFacilitySelect={setDetailsFacility}
+        onShowDetails={setDetailsFacility}
       />
       <ChatSheet
         onRouteReady={onRouteReady}
         defaultNavMode={userProfile?.preferred_transport || 'pt'}
         userProfile={userProfile}
       />
-      {/* Facility Hub — full detail sheet, replaces FacilitySidePane */}
-      {detailsFacility && (
-        <Suspense fallback={null}>
-          <FacilityHub
-            facility={detailsFacility}
-            onClose={() => setDetailsFacility(null)}
-            onNavigateTo={routeFromUserTo}
-          />
-        </Suspense>
+      <FacilitySidePane 
+        facility={detailsFacility} 
+        onClose={() => setDetailsFacility(null)} 
+        onNavigateTo={routeFromUserTo}
+        user={user}
+        isSaved={detailsFacility && savedFacilityIds.has(detailsFacility.id)}
+        onSaveToggle={onSaveToggle}
+      />
+      {showSavedPanel && (
+        <SavedPanel
+          facilities={tampinesFacilities}
+          savedFacilityIds={savedFacilityIds}
+          onClose={() => setShowSavedPanel(false)}
+          onNavigateTo={routeFromUserTo}
+          onShowDetails={setDetailsFacility}
+        />
       )}
+
       {showAddForm && (
         <div className="add-spot-overlay">
           <div className="add-spot-sheet">

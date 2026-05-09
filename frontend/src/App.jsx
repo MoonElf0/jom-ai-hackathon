@@ -10,6 +10,9 @@ import ProfilePage         from './pages/ProfilePage'
 import ResetPasswordPage   from './pages/ResetPasswordPage'
 import CommunityMatcher    from './pages/CommunityMatcher'
 import FacilityHub         from './pages/FacilityHub'
+import FriendsPage         from './pages/FriendsPage'
+import ChatListPage        from './pages/ChatListPage'
+import ChatRoomPage        from './pages/ChatRoomPage'
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth()
@@ -35,7 +38,10 @@ export default function App() {
         <Route path="/map"               element={<RequireAuth><MapView /></RequireAuth>} />
         <Route path="/profile"           element={<RequireAuth><ProfilePage /></RequireAuth>} />
         <Route path="/community-matcher" element={<RequireAuth><CommunityMatcher /></RequireAuth>} />
-        <Route path="/facility-hub" element={<RequireAuth><FacilityHub /></RequireAuth>} />
+        <Route path="/facility-hub"      element={<RequireAuth><FacilityHub /></RequireAuth>} />
+        <Route path="/friends"           element={<RequireAuth><FriendsPage /></RequireAuth>} />
+        <Route path="/chats"             element={<RequireAuth><ChatListPage /></RequireAuth>} />
+        <Route path="/chat/:chatId"      element={<RequireAuth><ChatRoomPage /></RequireAuth>} />
       </Routes>
     </BrowserRouter>
   )
