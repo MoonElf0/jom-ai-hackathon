@@ -154,7 +154,7 @@ function stripNavPrefix(text) {
 // ══════════════════════════════════════════════════════════════════
 // NAVBAR
 // ══════════════════════════════════════════════════════════════════
-const Navbar = memo(function Navbar({ onNavigateProfile, onNavigateFriends, onNavigateChats, onNavigateSaved, onSignOut }) {
+const Navbar = memo(function Navbar({ onNavigateProfile, onNavigateFriends, onNavigateChats, onNavigateSaved, onNavigateHome, onSignOut }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -181,6 +181,9 @@ const Navbar = memo(function Navbar({ onNavigateProfile, onNavigateFriends, onNa
         </button>
 
         <div className={`dropdown-menu${isMenuOpen ? ' is-open' : ''}`} role="menu" align="center">
+          <button className="dropdown-item" onClick={() => { setIsMenuOpen(false); onNavigateHome?.() }} role="menuitem">
+            🏠 Home
+          </button>
           <button className="dropdown-item" onClick={() => setIsMenuOpen(false)} role="menuitem">
             🗺️ Map Home
           </button>
@@ -1485,6 +1488,7 @@ export default function MapView() {
         onNavigateFriends={() => navigate('/friends')}
         onNavigateChats={() => navigate('/chats')}
         onNavigateSaved={() => setShowSavedPanel(true)}
+        onNavigateHome={() => navigate('/')}
         onSignOut={handleSignOut}
       />
       <MapArea

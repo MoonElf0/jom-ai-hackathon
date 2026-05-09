@@ -13,6 +13,7 @@ import FacilityHub         from './pages/FacilityHub'
 import FriendsPage         from './pages/FriendsPage'
 import ChatListPage        from './pages/ChatListPage'
 import ChatRoomPage        from './pages/ChatRoomPage'
+import HomePage            from './pages/HomePage'
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth()
@@ -32,7 +33,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/map" replace />} />
+        <Route path="/" element={<RequireAuth><HomePage /></RequireAuth>} />
         <Route path="/auth"              element={<RedirectIfAuthed><AuthPage /></RedirectIfAuthed>} />
         <Route path="/reset-password"    element={<ResetPasswordPage />} />
         <Route path="/map"               element={<RequireAuth><MapView /></RequireAuth>} />

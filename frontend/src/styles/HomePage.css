@@ -1,0 +1,338 @@
+/* ══════════════════════════════════════════════════════════════
+   HOME PAGE
+══════════════════════════════════════════════════════════════ */
+
+.home-page {
+  min-height: 100dvh;
+  background: var(--bg);
+  padding-bottom: 100px; /* Space for chatbot button */
+}
+
+/* ── Header ────────────────────────────────────────────────── */
+.home-header {
+  padding: max(20px, env(safe-area-inset-top) + 14px) 20px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.home-welcome h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.home-welcome p {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+
+/* ── Content ───────────────────────────────────────────────── */
+.home-content {
+  padding: 20px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* ── Section Styles ────────────────────────────────────────── */
+.home-section {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.section-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.map-shortcut-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+}
+
+.map-shortcut-btn:hover {
+  transform: scale(1.05);
+  box-shadow: var(--shadow-md);
+}
+
+/* ── Recents Grid ──────────────────────────────────────────── */
+.recents-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.recent-card {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-2);
+  transition: var(--transition-fast);
+}
+
+.recent-card:hover {
+  background: var(--surface);
+  border-color: var(--border);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.recent-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--accent-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-right: 16px;
+  flex-shrink: 0;
+}
+
+.recent-info {
+  flex: 1;
+}
+
+.recent-info h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.recent-info p {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.recent-nav-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: var(--transition-fast);
+}
+
+.recent-nav-btn:hover {
+  background: var(--accent);
+  transform: scale(1.1);
+}
+
+/* ── Friends List ──────────────────────────────────────────── */
+.friends-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.friend-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-2);
+  transition: var(--transition-fast);
+}
+
+.friend-item:hover {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.friend-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.friend-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.friend-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.friend-status {
+  font-size: 12px;
+  color: var(--cyan);
+  font-weight: 500;
+}
+
+.friend-chat-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--cyan);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: var(--transition-fast);
+}
+
+.friend-chat-btn:hover {
+  background: var(--cyan);
+  transform: scale(1.1);
+}
+
+/* ── Recommendations Grid ──────────────────────────────────── */
+.recommendations-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.recommendation-card {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-2);
+  transition: var(--transition-fast);
+}
+
+.recommendation-card:hover {
+  background: var(--surface);
+  border-color: var(--border);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.facility-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--accent-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-right: 16px;
+  flex-shrink: 0;
+}
+
+.facility-info {
+  flex: 1;
+}
+
+.facility-info h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.facility-info p {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.facility-nav-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: var(--transition-fast);
+}
+
+.facility-nav-btn:hover {
+  background: var(--accent);
+  transform: scale(1.1);
+}
+
+/* ── Chatbot Button ────────────────────────────────────────── */
+.chatbot-btn {
+  position: fixed;
+  bottom: max(20px, env(safe-area-inset-bottom) + 14px);
+  right: 20px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  box-shadow: var(--shadow-lg);
+  transition: var(--transition-fast);
+  z-index: 1000;
+}
+
+.chatbot-btn:hover {
+  transform: scale(1.05);
+  box-shadow: var(--shadow-accent);
+}
+
+/* ── Responsive Design ─────────────────────────────────────── */
+@media (max-width: 480px) {
+  .home-content {
+    padding: 16px;
+  }
+
+  .home-section {
+    padding: 16px;
+  }
+
+  .home-welcome h1 {
+    font-size: 24px;
+  }
+
+  .section-header h2 {
+    font-size: 18px;
+  }
+
+  .chatbot-btn {
+    width: 56px;
+    height: 56px;
+    font-size: 20px;
+  }
+}
